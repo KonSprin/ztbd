@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:18.0-trixie
+    container_name: postgres
+    restart: unless-stopped
+    volumes:
+      - postgresql_data:/var/lib/postgresql/18/docker
+      # - ./initdb.d:/docker-entrypoint-initdb.d
+    env_file:
+      - .env    
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    networks:
+      - postgres_network
+  pgadmin:
+    image: dpage/pgadmin4:9.9.0
+    container_name: pgadmin
+    restart: unless-stopped
+    volumes:
+      - pgadmin_working_dir:/var/lib/pgadmin
+      - pgadmin_config_dir:/pgadmin4
+    env_file:
+      - .env    
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - postgres
+    ports:
+      - "5433:80"
+    networks:
+      - postgres_network
+
+volumes:
+  postgresql_data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ${POSTGRESQL_DATA}
+  pgadmin_working_dir:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ${PGADMIN_DATA}
+  pgadmin_config_dir:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ${CONFIG_DIR}/pgadmin
+
+networks:
+  postgres_network:
+    driver: bridge

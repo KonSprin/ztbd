@@ -35,6 +35,11 @@ services:
       - "5433:80"
     networks:
       - postgres_network
+    labels:
+      - homepage.group=Database
+      - homepage.name=PG Admin
+      - homepage.icon=pgadmin.png
+      - homepage.href=http://192.168.100.14:5433
 
 volumes:
   postgresql_data:

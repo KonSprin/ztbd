@@ -1,0 +1,19 @@
+services:
+  neo4j:
+    image: neo4j:latest
+    volumes:  
+        - ${NEO4J_DATA}/logs:/logs
+        - ${NEO4J_DATA}/data:/data
+        - ${NEO4J_DATA}/plugins:/plugins
+        - ${CONFIG_DIR}:/config
+    environment:
+        - NEO4J_AUTH=${NEO4J_AUTH}
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    restart: unless-stopped
+    labels:
+      - homepage.group=Database
+      - homepage.name=Neo4j
+      - homepage.icon=neo4j.png
+      - homepage.href=http://192.168.100.14:7474

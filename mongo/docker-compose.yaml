@@ -1,0 +1,48 @@
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    env_file:
+      - .env
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+
+  mongo-express:
+    image: mongo-express
+    restart: unless-stopped
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_URL: ${ME_CONFIG_MONGODB_URL}
+      ME_CONFIG_BASICAUTH_ENABLED: true
+      ME_CONFIG_BASICAUTH_USERNAME: ${ME_CONFIG_BASICAUTH_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ME_CONFIG_BASICAUTH_PASSWORD}
+    labels:
+      - homepage.group=Database
+      - homepage.name=Mongo Express
+      - homepage.icon=mongodb.png
+      - homepage.href=http://192.168.100.14:8081
+      # - homepage.widget.type=mongodb
+      # - homepage.widget.url=http://192.168.100.14:8081
+      # - homepage.widget.key=zxSGsrHaA5PoZrSVy_X1
+      # - homepage.widget.fields=["movies", "tv"] # optional
+
+volumes:
+  mongo_data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ${MONGO_DATA}
+  mongo_config:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ${MONGO_CONFIG}

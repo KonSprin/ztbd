@@ -1,5 +1,5 @@
 .env
-postgresql/config
+*/config
 
 *.csv
 

@@ -2,6 +2,8 @@ import kagglehub
 import pandas as pd
 import os
 
+### DEPRECATED ###
+
 def downlaod_keggle_ds(dataset, csv_filename):
     # Download dataset from Kaggle
     print(f"Downloading dataset from Kaggle: {dataset}")

@@ -65,9 +65,11 @@ class ZTBDataFrame:
         """Convert column to datetime"""
         if column in self._df.columns:
             if unit:
-                self._df[column] = pd.to_datetime(self._df[column], unit=unit, errors=errors)
+                # self._df[column] = pd.to_datetime(self._df[column], unit=unit, errors=errors)
+                self._df[column] = pd.to_datetime(self._df[column], unit=unit)
             else:
-                self._df[column] = pd.to_datetime(self._df[column], errors=errors)
+                # self._df[column] = pd.to_datetime(self._df[column], errors=errors)
+                self._df[column] = pd.to_datetime(self._df[column])
             logger.info(f"Converted {column} to datetime")
     
     def limit_records(self, head_count):

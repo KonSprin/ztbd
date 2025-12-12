@@ -1,4 +1,5 @@
 import os
+import time
 
 from .ztbdf import create_games_dataframe, create_reviews_dataframe
 from .mongodb.importer import MongoDBImporter
@@ -126,25 +127,33 @@ class DatabaseManager:
         
         try:
             print("\n=== Importing to MongoDB ===")
+            start_time = time.time()
             importer = self.importers['mongodb']
 
+            drop_time = start_time
             if drop:
                 importer.clean_database(['reviews', 'games'])
+                drop_time = time.time()
             
             # Import games (importer handles MongoDB-specific data cleaning)
             importer.import_games(games_df)
             
             # Import reviews
             importer.import_reviews(reviews_df)
+            import_time = time.time()
             
             # Verify imports
             games_count = importer.db.games.count_documents({})
             reviews_count = importer.db.reviews.count_documents({})
+            verify_time = time.time()
             
             self.results['mongodb'] = {
                 'games': games_count,
                 'reviews': reviews_count,
-                'status': 'success'
+                'status': 'success',
+                'import_time': import_time - start_time,
+                'verify_time': verify_time - import_time,
+                'drop_time': drop_time - start_time,
             }
             
             print(f" MongoDB import completed - Games: {games_count}, Reviews: {reviews_count}")
@@ -163,16 +172,20 @@ class DatabaseManager:
         
         try:
             print("\n=== Importing to Neo4j ===")
+            start_time = time.time()
             importer = self.importers['neo4j']
 
+            drop_time = start_time
             if drop:
                 importer.clean_database(['reviews', 'games'])
+                drop_time = time.time()
             
             # Import games
             importer.import_games(games_df)
             
             # Import reviews
             importer.import_reviews(reviews_df)
+            import_time = time.time()
             
             # Verify imports
             with importer.driver.session() as session:
@@ -180,13 +193,17 @@ class DatabaseManager:
                 reviews_count = session.run("MATCH (r:Review) RETURN count(r) as count").single()['count']
                 devs_count = session.run("MATCH (d:Developer) RETURN count(d) as count").single()['count']
                 genres_count = session.run("MATCH (g:Genre) RETURN count(g) as count").single()['count']
+            verify_time = time.time()
             
             self.results['neo4j'] = {
                 'games': games_count,
                 'reviews': reviews_count,
                 'developers': devs_count,
                 'genres': genres_count,
-                'status': 'success'
+                'status': 'success',
+                'import_time': import_time - start_time,
+                'verify_time': verify_time - import_time,
+                'drop_time': drop_time - start_time,
             }
             
             print(f" Neo4j import completed - Games: {games_count}, Reviews: {reviews_count}")
@@ -206,10 +223,13 @@ class DatabaseManager:
         
         try:
             print("\n=== Importing to PostgreSQL ===")
+            start_time = time.time()
             importer = self.importers['postgresql']
             
+            drop_time = start_time
             if drop:
                 importer.clean_database(['reviews', 'games'])
+                drop_time = time.time()
 
             # Import games with JSON columns
             games_json_cols = ['supported_languages', 'full_audio_languages', 'packages', 
@@ -219,11 +239,18 @@ class DatabaseManager:
             
             # Import reviews
             importer.import_dataset('reviews', reviews_df)
+            import_time = time.time()
+
+            # TODO: Verify postgre import
+            verify_time = time.time()
             
             self.results['postgresql'] = {
                 'games': len(games_df.df),
                 'reviews': len(reviews_df.df),
-                'status': 'success'
+                'status': 'success',
+                'import_time': import_time - start_time,
+                'verify_time': verify_time - import_time,
+                'drop_time': drop_time - start_time,
             }
             
             print(f" PostgreSQL import completed - Games: {len(games_df.df)}, Reviews: {len(reviews_df.df)}")
@@ -255,12 +282,17 @@ class DatabaseManager:
             print(f"{status_symbol} {db_name.upper()}:")
             
             if result['status'] == 'success':
-                print(f"  Games: {result.get('games', 'N/A')}")
-                print(f"  Reviews: {result.get('reviews', 'N/A')}")
+                print(f"   Games: {result.get('games', 'N/A')}")
+                print(f"   Reviews: {result.get('reviews', 'N/A')}")
                 if 'developers' in result:
-                    print(f"  Developers: {result['developers']}")
+                    print(f"   Developers: {result['developers']}")
                 if 'genres' in result:
-                    print(f"  Genres: {result['genres']}")
+                    print(f"   Genres: {result['genres']}")
+                print("  Timings:")
+                print(f"   Import Time: {result.get('import_time', 'N/A')}")
+                print(f"   Verify Time: {result.get('verify_time', 'N/A')}")
+                if result.get('drop_time') != 0:
+                    print(f"   Drop Time: {result.get('drop_time', 'N/A')}")
             else:
                 print(f"  Error: {result.get('error', 'Unknown error')}")
             print()

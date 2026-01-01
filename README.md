@@ -39,3 +39,14 @@ POSTGRESQL:
    Verify Time: N/A
    Drop Time: 0.30413246154785156
 ```
+```
+ NEO4J:
+   Games: 89618
+   Reviews: 1851779
+   Developers: 60096
+   Genres: 33
+  Timings:
+   Import Time: 584.9438633918762
+   Verify Time: 71.1950330734253
+   Drop Time: 40.20628261566162
+```

@@ -62,9 +62,11 @@ class PostgreSQLImporter:
             print(f"XX Error dropping PostgreSQL tables: {e}")
             raise
     
-    def import_dataset(self, table_name: str, ztb_df: ZTBDataFrame, json_columns=None):
+    def import_df(self, ztb_df: ZTBDataFrame, json_columns=None):
         """Import pre-cleaned dataset to PostgreSQL"""
         try:
+            table_name = ztb_df._name
+
             print(f"Importing {len(ztb_df.df)} records to {table_name}...")
 
             # PostgreSQL-specific JSON column handling

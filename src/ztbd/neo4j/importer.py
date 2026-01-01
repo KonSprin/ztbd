@@ -1,153 +1,254 @@
 from neo4j import GraphDatabase
-import pandas as pd
-import time
-from typing import Dict, Any, List
 from ..ztbdf import ZTBDataFrame
+import typing
+import logging
+
+logger = logging.getLogger('ztbd')
+
 
 class Neo4jImporter:
-    def __init__(self, uri: str, user: str, password: str):
+    def __init__(self, uri, user, password):
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        self._verify_connectivity()
+    
+    def _verify_connectivity(self):
+        """Verify database connection"""
+        try:
+            with self.driver.session() as session:
+                session.run("RETURN 1")
+            logger.info("Neo4j connection verified")
+        except Exception as e:
+            logger.error(f"Neo4j connection failed: {e}")
+            raise
     
     def close(self):
+        """Close database connection"""
         self.driver.close()
     
-    def clear_database(self):
-        """Clear all nodes and relationships"""
+    def clean_database(self, node_types=None):
+        """
+        Clean (delete) nodes and relationships from Neo4j database
+        
+        Args:
+            node_types: List of node labels to delete. If None, deletes everything.
+        """
+        print(f"Cleaning Neo4j database...")
+        
         with self.driver.session() as session:
-            session.run("MATCH (n) DETACH DELETE n")
-            print("Database cleared")
+            if node_types is None:
+                # Delete all nodes and relationships
+                session.run("MATCH (n) DETACH DELETE n")
+                print("  Deleted all nodes and relationships")
+            else:
+                # Delete specific node types
+                for node_type in node_types:
+                    query = typing.cast(typing.LiteralString, f"MATCH (n:{node_type}) DETACH DELETE n")
+                    result = session.run(query)
+                    print(f"  Deleted {node_type} nodes")
+        
+        print("Neo4j cleanup complete")
     
-    def create_constraints(self):
-        """Create constraints and indexes"""
+    def _create_constraints(self):
+        """Create uniqueness constraints for primary keys"""
         constraints = [
             "CREATE CONSTRAINT game_appid IF NOT EXISTS FOR (g:Game) REQUIRE g.appid IS UNIQUE",
             "CREATE CONSTRAINT review_id IF NOT EXISTS FOR (r:Review) REQUIRE r.review_id IS UNIQUE",
             "CREATE CONSTRAINT developer_name IF NOT EXISTS FOR (d:Developer) REQUIRE d.name IS UNIQUE",
             "CREATE CONSTRAINT publisher_name IF NOT EXISTS FOR (p:Publisher) REQUIRE p.name IS UNIQUE",
             "CREATE CONSTRAINT genre_name IF NOT EXISTS FOR (g:Genre) REQUIRE g.name IS UNIQUE",
-            "CREATE CONSTRAINT category_name IF NOT EXISTS FOR (c:Category) REQUIRE c.name IS UNIQUE",
-            "CREATE CONSTRAINT language_name IF NOT EXISTS FOR (l:Language) REQUIRE l.name IS UNIQUE",
-            "CREATE CONSTRAINT tag_name IF NOT EXISTS FOR (t:Tag) REQUIRE t.name IS UNIQUE"
-        ]
-        
-        indexes = [
-            "CREATE INDEX game_name IF NOT EXISTS FOR (g:Game) ON (g.name)",
-            "CREATE INDEX review_app_id IF NOT EXISTS FOR (r:Review) ON (r.app_id)"
+            "CREATE CONSTRAINT category_name IF NOT EXISTS FOR (c:Category) REQUIRE c.name IS UNIQUE"
         ]
         
         with self.driver.session() as session:
             for constraint in constraints:
-                session.run(constraint)
-            for index in indexes:
-                session.run(index)
-            
-        print("Constraints and indexes created")
+                try:
+                    constraint = typing.cast(typing.LiteralString, constraint)
+                    session.run(constraint)
+                except Exception as e:
+                    # Constraint might already exist
+                    logger.debug(f"Constraint creation note: {e}")
     
-    def _parse_json_field(self, value):
-        """Parse JSON field from CSV"""
-        if pd.isna(value) or value == '':
-            return None
-        try:
-            return eval(value) if isinstance(value, str) else value
-        except:
-            return None
-    
-    def _prepare_game_data(self, row) -> Dict[str, Any]:
-        """Convert DataFrame row to game data dict"""
-        return {
-            'appid': int(row['appid']) if pd.notna(row['appid']) else None,
-            'name': str(row['name']) if pd.notna(row['name']) else None,
-            'release_date': str(row['release_date']) if pd.notna(row['release_date']) else None,
-            'required_age': int(row['required_age']) if pd.notna(row['required_age']) else None,
-            'price': float(row['price']) if pd.notna(row['price']) else None,
-            # ... existing fields ...
-            'developers': self._parse_json_field(row['developers']),
-            'publishers': self._parse_json_field(row['publishers']),
-            'genres': self._parse_json_field(row['genres']),
-            'categories': self._parse_json_field(row['categories']),
-            'supported_languages': self._parse_json_field(row['supported_languages']),
-            'tags': self._parse_json_field(row['tags'])
-        }
-    
-    def _prepare_review_data(self, row) -> Dict[str, Any]:
-        """Convert DataFrame row to review data dict"""
-        return {
-            'review_id': int(row['review_id']) if pd.notna(row['review_id']) else None,
-            'app_id': int(row['app_id']) if pd.notna(row['app_id']) else None,
-            'app_name': str(row['app_name']) if pd.notna(row['app_name']) else None,
-            'language': str(row['language']) if pd.notna(row['language']) else None,
-            'review_text': str(row['review']) if pd.notna(row['review']) else None,
-            'timestamp_created': int(row['timestamp_created']) if pd.notna(row['timestamp_created']) else None,
-            'recommended': bool(row['recommended']) if pd.notna(row['recommended']) else None,
-            # ... existing fields ...
-        }
-    
-    def import_games(self, ztb_df: ZTBDataFrame, batch_size=500):
-        """Import games with relationships in batches"""
-        total_games = len(ztb_df.df)
-        
-        # Check if games already imported
+    def _create_indexes(self, node_label, properties):
+        """Create indexes on specified properties"""
         with self.driver.session() as session:
-            result = session.run("MATCH (g:Game) RETURN count(g) as count")
-            existing_count = result.single()['count']
-        
-        if existing_count == total_games:
-            print(f"Games already imported: {total_games}")
-            return
-        
-        self.clear_database()
-        self.create_constraints()
-        
-        games_batch = []
-        imported = 0
-        
-        for idx, row in ztb_df.df.iterrows():
-            game_data = self._prepare_game_data(row)
-            games_batch.append(game_data)
-            
-            if len(games_batch) >= batch_size:
-                self._import_games_batch(games_batch)
-                imported += len(games_batch)
-                print(f"  Imported {imported} games out of {total_games}")
-                games_batch = []
-        
-        if games_batch:
-            self._import_games_batch(games_batch)
-        
-        print(f"Imported {total_games} games")
+            for prop in properties:
+                try:
+                    query = f"CREATE INDEX {node_label.lower()}_{prop} IF NOT EXISTS FOR (n:{node_label}) ON (n.{prop})"
+                    query = typing.cast(typing.LiteralString, query)
+                    session.run(query)
+                    logger.info(f"Created index on {node_label}.{prop}")
+                except Exception as e:
+                    logger.debug(f"Index creation note: {e}")
     
-    def import_reviews(self, ztb_df: ZTBDataFrame, limit=1000000, batch_size=5000):
-        """Import reviews with relationships in batches"""
-        # Process dataframe
-        column_mapping = {
-            'author.steamid': 'author_steamid',
-            'author.num_games_owned': 'author_num_games_owned',
-            # ... existing mappings ...
-        }
+    def import_df(self, ztb_df: ZTBDataFrame, node_label, indexes=None, relationship_configs=None, batch_size=1000):
+        """
+        Generic import method for any dataframe to Neo4j
         
-        ztb_df.rename_columns(column_mapping)
-        ztb_df.drop_unnamed_columns()
-        ztb_df.handle_duplicates()
-        ztb_df.sort_by_column('author_steamid')
-        ztb_df.limit_records(limit)
+        Args:
+            ztb_df: ZTBDataFrame to import
+            node_label: Label for the nodes (e.g., 'Game', 'Review')
+            indexes: List of properties to index
+            relationship_configs: List of dicts defining relationships to create
+                Example: [{'type': 'DEVELOPED_BY', 'target_label': 'Developer', 
+                          'source_key': 'developers', 'target_key': 'name'}]
+            batch_size: Number of records per batch
+        """
+        logger.info(f"Importing {node_label} nodes to Neo4j")
         
-        reviews_batch = []
-        imported = 0
-        total_reviews = len(ztb_df.df)
+        # Create constraints first
+        self._create_constraints()
         
-        for idx, row in ztb_df.df.iterrows():
-            review_data = self._prepare_review_data(row)
-            reviews_batch.append(review_data)
-            
-            if len(reviews_batch) >= batch_size:
-                self._import_reviews_batch(reviews_batch)
-                imported += len(reviews_batch)
-                print(f"  Imported {imported} reviews out of {total_reviews}")
-                reviews_batch = []
-        
-        if reviews_batch:
-            self._import_reviews_batch(reviews_batch)
-        
-        print(f"Imported {total_reviews} reviews")
+        records = ztb_df.clean_nan_values()
+
+        # Prepare records for Neo4j (convert nested structures to JSON strings)
+        records = self._prepare_records_for_neo4j(records)
     
-    # TODO: batch import methods
+        total_records = len(records)
+        
+        # Import main nodes in batches
+        with self.driver.session() as session:
+            for i in range(0, total_records, batch_size):
+                batch = records[i:i + batch_size]
+                
+                # Build the query dynamically
+                query = f"""
+                UNWIND $batch AS record
+                MERGE (n:{node_label} {{`{ztb_df.primary_key}`: record.`{ztb_df.primary_key}`}})
+                SET n += record
+                """
+                query = typing.cast(typing.LiteralString, query)
+                
+                session.run(query, batch=batch)
+                
+                if (i + batch_size) % (batch_size * 5) == 0:
+                    logger.info(f"  Imported {min(i + batch_size, total_records)}/{total_records} {node_label} nodes")
+        
+        logger.info(f"Completed importing {total_records} {node_label} nodes")
+        
+        # Create indexes
+        if indexes:
+            self._create_indexes(node_label, indexes)
+        
+        # Create relationships if configured
+        if relationship_configs:
+            self._create_relationships(ztb_df, node_label, relationship_configs, batch_size)
+    
+    def _create_relationships(self, ztb_df, source_label, relationship_configs, batch_size):
+        """Create relationships based on configuration"""
+        for config in relationship_configs:
+            rel_type = config['type']
+            target_label = config['target_label']
+            source_key = config['source_key']
+            target_key = config.get('target_key', 'name')
+            
+            logger.info(f"Creating {rel_type} relationships")
+            
+            # Get records that have the source key
+            records = []
+            for record in ztb_df.clean_nan_values():
+                if source_key in record and record[source_key]:
+                    # Handle both single values and lists
+                    values = record[source_key] if isinstance(record[source_key], list) else [record[source_key]]
+                    for value in values:
+                        if value:
+                            records.append({
+                                'source_id': record[ztb_df.primary_key],
+                                'target_value': value
+                            })
+            
+            # Create relationships in batches
+            with self.driver.session() as session:
+                for i in range(0, len(records), batch_size):
+                    batch = records[i:i + batch_size]
+                    
+                    query = f"""
+                    UNWIND $batch AS rel
+                    MATCH (source:{source_label} {{`{ztb_df.primary_key}`: rel.source_id}})
+                    MERGE (target:{target_label} {{`{target_key}`: rel.target_value}})
+                    MERGE (source)-[:{rel_type}]->(target)
+                    """
+                    query = typing.cast(typing.LiteralString, query)
+                    
+                    session.run(query, batch=batch)
+                    
+                    if (i + batch_size) % (batch_size * 10) == 0:
+                        logger.info(f"  Created {min(i + batch_size, len(records))}/{len(records)} {rel_type} relationships")
+            
+            logger.info(f"Completed creating {len(records)} {rel_type} relationships")
+
+    def _prepare_records_for_neo4j(self, records):
+        """Convert nested structures to JSON strings for Neo4j compatibility"""
+        import json
+        
+        json_fields = [
+            'packages', 'screenshots', 'movies', 'supported_languages',
+            'full_audio_languages', 'categories', 'genres', 'tags'
+        ]
+        
+        prepared_records = []
+        for record in records:
+            clean_record = record.copy()
+            
+            for field in json_fields:
+                if field in clean_record and clean_record[field] is not None:
+                    # Convert to JSON string if it's a complex structure
+                    value = clean_record[field]
+                    if isinstance(value, (dict, list)):
+                        # Check if it contains nested structures
+                        try:
+                            # Simple lists of primitives are OK, but check first item
+                            if isinstance(value, list) and len(value) > 0:
+                                if isinstance(value[0], (dict, list)):
+                                    clean_record[field] = json.dumps(value)
+                            elif isinstance(value, dict):
+                                clean_record[field] = json.dumps(value)
+                        except:
+                            clean_record[field] = json.dumps(value)
+            
+            prepared_records.append(clean_record)
+        
+        return prepared_records
+
+
+    # Deprecated methods for backward compatibility
+    def import_games(self, ztb_df: ZTBDataFrame):
+        """Import games - DEPRECATED: use import_df() instead"""
+        logger.warning("USING DEPRECATED FUNCTION: use import_df() instead")
+        
+        relationship_configs = [
+            {'type': 'DEVELOPED_BY', 'target_label': 'Developer', 'source_key': 'developers'},
+            {'type': 'PUBLISHED_BY', 'target_label': 'Publisher', 'source_key': 'publishers'},
+            {'type': 'HAS_GENRE', 'target_label': 'Genre', 'source_key': 'genres'},
+            {'type': 'HAS_CATEGORY', 'target_label': 'Category', 'source_key': 'categories'}
+        ]
+        
+        self.import_df(
+            ztb_df=ztb_df,
+            node_label='Game',
+            indexes=['name', 'release_date', 'price'],
+            relationship_configs=relationship_configs
+        )
+    
+    def import_reviews(self, ztb_df: ZTBDataFrame):
+        """Import reviews - DEPRECATED: use import_df() instead"""
+        logger.warning("USING DEPRECATED FUNCTION: use import_df() instead")
+        
+        # First import review nodes
+        self.import_df(
+            ztb_df=ztb_df,
+            node_label='Review',
+            indexes=['app_id', 'recommended', 'timestamp_created'],
+            batch_size=5000
+        )
+        
+        # Then create REVIEWED relationships to games
+        logger.info("Creating REVIEWED relationships")
+        with self.driver.session() as session:
+            query = """
+            MATCH (r:Review)
+            MATCH (g:Game {appid: r.app_id})
+            MERGE (r)-[:REVIEWED]->(g)
+            """
+            session.run(query)
+        
+        logger.info("Completed creating REVIEWED relationships")

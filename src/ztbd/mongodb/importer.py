@@ -1,5 +1,9 @@
 from pymongo import MongoClient, ASCENDING
 from ..ztbdf import ZTBDataFrame
+import logging
+
+logger = logging.getLogger('ztbd')
+
 
 class MongoDBImporter:
     def __init__(self, uri, database_name):
@@ -36,6 +40,7 @@ class MongoDBImporter:
         self.clean_database(['reviews'])
     
     def import_games(self, ztb_df: ZTBDataFrame):
+        logger.warning("USING DEPRECATED FUNCTION: use import_df() instead")
         """Import pre-cleaned games to MongoDB"""
         print("Importing games to MongoDB...")
         
@@ -54,6 +59,7 @@ class MongoDBImporter:
     
     def import_reviews(self, ztb_df: ZTBDataFrame):
         """Import pre-cleaned reviews to MongoDB"""
+        logger.warning("USING DEPRECATED FUNCTION: use import_df() instead")
         print("Importing reviews to MongoDB...")
         
         # MongoDB-specific data cleaning (NaN handling)
@@ -78,3 +84,35 @@ class MongoDBImporter:
         self.db.reviews.create_index([("review_id", ASCENDING)], unique=True)
         self.db.reviews.create_index([("recommended", ASCENDING)])
         self.db.reviews.create_index([("timestamp_created", ASCENDING)])
+
+    def import_df(self, ztb_df: ZTBDataFrame, indexes: list, primary_key = "", batch_size = 0):
+        """Import pre-cleaned dataframe to MongoDB"""
+        logger.info("Importing data to MongoDB")
+
+        # MongoDB-specific data cleaning (NaN handling)
+        df_records = ztb_df.clean_nan_values()
+
+        collection_name = ztb_df.name
+
+        if batch_size > 0:
+            total_inserted = 0
+            for i in range(0, len(df_records), batch_size):
+                batch = df_records[i:i + batch_size]
+                result = self.db[collection_name].insert_many(batch)
+                total_inserted += len(result.inserted_ids)
+                if total_inserted % (batch_size * 5) == 0:  # Less frequent logging
+                    logger.info(f"  Inserted {total_inserted}/{len(df_records)} records...")
+        else:
+            result = self.db[collection_name].insert_many(df_records)
+            logger.info(f"Imported {len(result.inserted_ids)} records")
+
+        if not primary_key:
+            primary_key = indexes[0]
+
+        # Create indexes
+        print(f"Creating indexes on {collection_name} collection...")
+        for index in indexes:
+            if index == primary_key:
+                self.db[collection_name].create_index([(index, ASCENDING)], unique=True)
+            else:
+                self.db[collection_name].create_index([(index, ASCENDING)])

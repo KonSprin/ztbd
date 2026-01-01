@@ -1,7 +1,7 @@
 import os
 import time
 
-from .ztbdf import create_games_dataframe, create_reviews_dataframe
+from .ztbdf import create_games_dataframe, create_reviews_dataframe, create_hltb_dataframe
 from .mongodb.importer import MongoDBImporter
 from .neo4j.importer import Neo4jImporter
 from .postgresql.importer import PostgreSQLImporter
@@ -62,11 +62,28 @@ class DataProcessor:
         reviews_df.handle_duplicates()
         
         # Sort and limit records
-        reviews_df.sort_by_column('author_steamid')
+        reviews_df.sort_by_column(reviews_df.primary_key)
         reviews_df.limit_records(limit)
         
         print(f" Reviews dataset prepared: {len(reviews_df.df)} records")
         return reviews_df
+
+    @staticmethod
+    def prepare_hltb_dataframe():
+        """Prepare and clean How Long to Beat dataframe"""
+        print("\n=== Processing Games How Long to Beat Dataset ===")
+        hltb_df = create_hltb_dataframe()
+        hltb_df.log_shape()
+
+        # Convert date column
+        # hltb_df.convert_datetime_column('release_date')
+        
+        # Handle duplicates
+        hltb_df.handle_duplicates()
+        
+        print(f"How Long to Beat dataset prepared: {len(hltb_df.df)} records")
+        return hltb_df
+
 
 class DatabaseManager:
     """Manages database imports"""
@@ -119,7 +136,7 @@ class DatabaseManager:
             print(f"XX PostgreSQL initialization failed: {e}")
             return False
     
-    def import_to_mongodb(self, games_df, reviews_df, drop=False):
+    def import_to_mongodb(self, games_df, reviews_df, hltb_df, drop=False):
         """Import data to MongoDB"""
         if 'mongodb' not in self.importers:
             print("MongoDB importer not initialized")
@@ -132,31 +149,36 @@ class DatabaseManager:
 
             drop_time = start_time
             if drop:
-                importer.clean_database(['reviews', 'games'])
+                importer.clean_database(['reviews', 'games', 'hltb'])
                 drop_time = time.time()
             
             # Import games (importer handles MongoDB-specific data cleaning)
-            importer.import_games(games_df)
-            
+            importer.import_df(games_df, indexes = ["appid", "name", "release_date"])
+
             # Import reviews
-            importer.import_reviews(reviews_df)
+            importer.import_df(reviews_df, indexes = ["review_id", "app_id", "recommended", "timestamp_created"], batch_size = 5000)
+
+            # Import hltb
+            importer.import_df(hltb_df, indexes = ["game_game_id", "game_game_name", "game_comp_all_count"])
             import_time = time.time()
             
             # Verify imports
             games_count = importer.db.games.count_documents({})
             reviews_count = importer.db.reviews.count_documents({})
+            hltb_count = importer.db.hltb.count_documents({})
             verify_time = time.time()
             
             self.results['mongodb'] = {
                 'games': games_count,
                 'reviews': reviews_count,
+                'hltbs': hltb_count,
                 'status': 'success',
                 'import_time': import_time - start_time,
                 'verify_time': verify_time - import_time,
                 'drop_time': drop_time - start_time,
             }
             
-            print(f" MongoDB import completed - Games: {games_count}, Reviews: {reviews_count}")
+            print(f" MongoDB import completed - Games: {games_count}, Reviews: {reviews_count}, HLTBs: {hltb_count}")
             return True
             
         except Exception as e:
@@ -164,7 +186,7 @@ class DatabaseManager:
             self.results['mongodb'] = {'status': 'failed', 'error': str(e)}
             return False
     
-    def import_to_neo4j(self, games_df, reviews_df, drop = False):
+    def import_to_neo4j(self, games_df, reviews_df, hltb_df, drop=False):
         """Import data to Neo4j"""
         if 'neo4j' not in self.importers:
             print("Neo4j importer not initialized")
@@ -177,15 +199,42 @@ class DatabaseManager:
 
             drop_time = start_time
             if drop:
-                importer.clean_database(['reviews', 'games'])
+                importer.clean_database()  # Clean everything
                 drop_time = time.time()
             
-            # Import games
-            importer.import_games(games_df)
+            # Import games with relationships
+            relationship_configs = [
+                {'type': 'DEVELOPED_BY', 'target_label': 'Developer', 'source_key': 'developers'},
+                {'type': 'PUBLISHED_BY', 'target_label': 'Publisher', 'source_key': 'publishers'},
+                {'type': 'HAS_GENRE', 'target_label': 'Genre', 'source_key': 'genres'},
+                {'type': 'HAS_CATEGORY', 'target_label': 'Category', 'source_key': 'categories'}
+            ]
+            
+            importer.import_df(
+                games_df, 
+                node_label='Game',
+                indexes=['name', 'release_date', 'price'],
+                relationship_configs=relationship_configs
+            )
             
             # Import reviews
-            importer.import_reviews(reviews_df)
+            importer.import_df(
+                reviews_df,
+                node_label='Review',
+                indexes=['app_id', 'recommended', 'timestamp_created'],
+                batch_size=5000
+            )
             import_time = time.time()
+            
+            # Create REVIEWED relationships
+            with importer.driver.session() as session:
+                session.run("""
+                    MATCH (r:Review)
+                    MATCH (g:Game {appid: r.app_id})
+                    MERGE (r)-[:REVIEWED]->(g)
+                """)
+            relationships_time = time.time()
+            
             
             # Verify imports
             with importer.driver.session() as session:
@@ -204,6 +253,7 @@ class DatabaseManager:
                 'import_time': import_time - start_time,
                 'verify_time': verify_time - import_time,
                 'drop_time': drop_time - start_time,
+                'relationships_time': relationships_time - import_time,
             }
             
             print(f" Neo4j import completed - Games: {games_count}, Reviews: {reviews_count}")
@@ -215,7 +265,7 @@ class DatabaseManager:
             self.results['neo4j'] = {'status': 'failed', 'error': str(e)}
             return False
     
-    def import_to_postgresql(self, games_df, reviews_df, drop = False):
+    def import_to_postgresql(self, games_df, reviews_df, hltb_df, drop = False):
         """Import data to PostgreSQL"""
         if 'postgresql' not in self.importers:
             print("PostgreSQL importer not initialized")
@@ -235,10 +285,13 @@ class DatabaseManager:
             games_json_cols = ['supported_languages', 'full_audio_languages', 'packages', 
                               'developers', 'publishers', 'categories', 'genres', 
                               'screenshots', 'movies', 'tags']
-            importer.import_dataset('games', games_df, json_columns=games_json_cols)
+            importer.import_df(games_df, json_columns=games_json_cols)
             
             # Import reviews
-            importer.import_dataset('reviews', reviews_df)
+            importer.import_df(reviews_df)
+            
+            importer.import_df(hltb_df)
+
             import_time = time.time()
 
             # TODO: Verify postgre import
@@ -247,13 +300,14 @@ class DatabaseManager:
             self.results['postgresql'] = {
                 'games': len(games_df.df),
                 'reviews': len(reviews_df.df),
+                'hltbs': len(hltb_df.df),
                 'status': 'success',
                 'import_time': import_time - start_time,
                 'verify_time': verify_time - import_time,
                 'drop_time': drop_time - start_time,
             }
             
-            print(f" PostgreSQL import completed - Games: {len(games_df.df)}, Reviews: {len(reviews_df.df)}")
+            print(f" PostgreSQL import completed - Games: {len(games_df.df)}, Reviews: {len(reviews_df.df)}, HLTBs: {len(hltb_df.df)}")
             return True
             
         except Exception as e:

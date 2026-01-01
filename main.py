@@ -1,8 +1,12 @@
 import argparse
 from dotenv import load_dotenv
 from src.ztbd.db_manager import DatabaseManager, DataProcessor
+import logging
 
 load_dotenv()
+
+logger = logging.getLogger('ztbd')
+logging.basicConfig(format='%(levelname)s:%(asctime)s:%(message)s', level=logging.DEBUG)
 
 def main():
     parser = argparse.ArgumentParser(description='Import Steam datasets to multiple databases')
@@ -12,10 +16,14 @@ def main():
                        help='Databases to import to (default: all)')
     parser.add_argument('--reviews-limit', '-r', type=int, default=1000000,
                        help='Limit number of reviews to import (default: 1000000)')
+
     parser.add_argument('--skip-games', action='store_true',
                        help='Skip games import')
     parser.add_argument('--skip-reviews', action='store_true',
                        help='Skip reviews import')
+    parser.add_argument('--skip-hltb', action='store_true',
+                       help='Skip how long to beat import')
+    
     parser.add_argument('--drop-all', action='store_true',
                        help='Drop all databases before import')
     
@@ -23,8 +31,8 @@ def main():
     
     # Expand 'all' option
     if 'all' in args.databases:
-        # args.databases = ['mongodb', 'neo4j', 'postgresql']
-        args.databases = ['mongodb', 'postgresql']
+        args.databases = ['mongodb', 'postgresql', 'neo4j']
+        # args.databases = ['mongodb', 'postgresql']
     
     print("Steam Dataset Multi-Database Importer")
     print("====================================")
@@ -37,12 +45,16 @@ def main():
         
         games_df = None
         reviews_df = None
+        hltb_df = None
         
         if not args.skip_games:
             games_df = processor.prepare_games_dataframe()
         
         if not args.skip_reviews:
             reviews_df = processor.prepare_reviews_dataframe(limit=args.reviews_limit)
+        
+        if not args.skip_hltb:
+            hltb_df = processor.prepare_hltb_dataframe()
         
         # Initialize database manager
         db_manager = DatabaseManager()
@@ -76,7 +88,7 @@ def main():
         # Import to each database
         for db_name in initialized_dbs:
             try:
-                import_func[db_name](games_df, reviews_df, args.drop_all)
+                import_func[db_name](games_df, reviews_df, hltb_df, args.drop_all)
                 # if db_name == 'mongodb':
                 #     db_manager.import_to_mongodb(games_df, reviews_df)
                 # elif db_name == 'neo4j':

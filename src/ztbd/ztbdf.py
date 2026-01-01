@@ -6,11 +6,12 @@ import logging
 logger = logging.getLogger('ztbd')
 
 class ZTBDataFrame:
-    def __init__(self, dataset, csv_filename, primary_key):
+    def __init__(self, dataset, csv_filename, primary_key, name):
         logging.basicConfig(filename='ztb.log', level=logging.INFO)
         
         self._df = self._download_dataset(dataset, csv_filename)
         self._primary_key = primary_key
+        self._name = name
         
         if primary_key in self._df.columns:
             logger.info(f"Set primary key: {primary_key}")
@@ -35,6 +36,10 @@ class ZTBDataFrame:
     @property 
     def primary_key(self):
         return self._primary_key
+    
+    @property
+    def name(self):
+        return self._name
     
     def log_shape(self):
         logger.info(f"Dataset shape: {self._df.shape}")
@@ -148,15 +153,45 @@ class ZTBDataFrame:
 
 # Factory function for common dataset configurations
 def create_games_dataframe():
+    """
+    This dataset has been created with Steam store page scraping and Steam Games Scraper repository, which gathers data using the Steam API and Steam Spy.
+    """
     return ZTBDataFrame(
         dataset="artermiloff/steam-games-dataset",
         csv_filename="games_march2025_cleaned.csv", 
-        primary_key="appid"
+        primary_key="appid",
+        name="games"
     )
 
 def create_reviews_dataframe():
+    """
+    Dataset of around 21 million user reviews of around 300 different games on Steam. Obtained using Steam's provided API outlined in the Steamworks documentation: https://partner.steamgames.com/doc/store/getreviews
+    """
     return ZTBDataFrame(
         dataset="najzeko/steam-reviews-2021",
         csv_filename="steam_reviews.csv",
-        primary_key="review_id"
+        primary_key="review_id",
+        name="reviews"
+    )
+
+def create_top100_dataframe():
+    """
+    This dataset contains the average players by month for the current top 100 games. It was scraped off https://steamcharts.com/top and converted into this easier to analyze format. 
+    """
+    return ZTBDataFrame(
+        dataset="jackogozaly/steam-player-data",
+        csv_filename="Valve_Player_Data.csv",
+        primary_key="",
+        name="top100"
+    )
+
+def create_hltb_dataframe():
+    """
+    The dataset contains structured data on video games scraped from HowLongToBeat as of February 16, 2025. This dataset includes various attributes such as playtime estimates, game metadata, platform-specific details, and completion statistics. Each row represents a unique game, with columns capturing its title, developer, publisher, platform, genre, release dates, and user engagement metrics. Playtime estimates are provided for Main Story, Main + Extras, and Completionist runs, expressed in minutes. Additionally, the dataset includes review scores, the number of players who have completed or are currently playing a game, and platform-specific completion time data. The file also contains user review distributions, showing how many players rated a game at different score levels. Missing values may appear in some columns, particularly for games with limited player engagement. This dataset is suitable for research, data visualization, and machine learning applications, offering insights into game lengths, popularity, and player behavior trends.
+    """
+    return ZTBDataFrame(
+        dataset="zaireali/howlongtobeat-games-scraper-2162025",
+        csv_filename="hltb_data.csv",
+        primary_key="game_game_id",
+        name="hltb"
     )

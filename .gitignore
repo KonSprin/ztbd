@@ -1,8 +1,9 @@
+__pycache__
+
 .env
 */config
 
+*.log
 *.csv
 
-__pycache__
-
-*.log
+old-*

@@ -43,7 +43,7 @@ def handle_duplicates(df: pd.DataFrame, key_column: str, output_file='duplicates
     if len(duplicates) > 0:
         # Save duplicates to file
         duplicates.to_csv(output_file, index=False)
-        print(f"✓ Duplicates saved to: {output_file}")
+        print(f" Duplicates saved to: {output_file}")
         
         # Show some stats about duplicates
         duplicate_ids = duplicates[key_column].value_counts().head(10)
@@ -87,7 +87,7 @@ def diagnose_columns(df: pd.DataFrame, table_name='reviews'):
                     if min_val < int_min or max_val > int_max:
                         print(f"  ⚠️  EXCEEDS INTEGER - needs BigInteger")
                     else:
-                        print(f"  ✓ Fits in Integer")
+                        print(f"   Fits in Integer")
                         
                     if min_val < bigint_min or max_val > bigint_max:
                         print(f"  ❌ EXCEEDS BIGINTEGER!")

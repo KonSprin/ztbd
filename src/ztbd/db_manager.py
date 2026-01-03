@@ -8,6 +8,10 @@ from .mongodb.importer import MongoDBImporter
 from .neo4j.importer import Neo4jImporter
 from .postgresql.importer import PostgreSQLImporter
 
+import logging
+
+logger = logging.getLogger('ztbd')
+
 class DataProcessor:
     """Centralized data processing for all datasets"""
     
@@ -21,7 +25,7 @@ class DataProcessor:
             if cached:
                 return cached
 
-        print("\n=== Processing Games Dataset ===")
+        logger.info("\n=== Processing Games Dataset ===")
         games_df = create_games_dataframe()
         games_df.log_shape()
         
@@ -37,7 +41,7 @@ class DataProcessor:
         # Handle duplicates
         games_df.handle_duplicates()
         
-        print(f"Games dataset prepared: {len(games_df.df)} records")
+        logger.info(f"Games dataset prepared: {len(games_df.df)} records")
         DataProcessor.save_dataframe(games_df, 'games')
         return games_df
     
@@ -51,7 +55,7 @@ class DataProcessor:
             if cached:
                 return cached
         
-        print("\n=== Processing Reviews Dataset ===")
+        logger.info("\n=== Processing Reviews Dataset ===")
         reviews_df = create_reviews_dataframe()
         reviews_df.log_shape()
         
@@ -82,7 +86,7 @@ class DataProcessor:
         reviews_df.sort_by_column(reviews_df.primary_key)
         reviews_df.limit_records(limit)
         
-        print(f" Reviews dataset prepared: {len(reviews_df.df)} records")
+        logger.info(f" Reviews dataset prepared: {len(reviews_df.df)} records")
         DataProcessor.save_dataframe(reviews_df, cache_name)
         return reviews_df
 
@@ -94,12 +98,12 @@ class DataProcessor:
             if cached:
                 return cached
 
-        print("\n=== Processing Games How Long to Beat Dataset ===")
+        logger.info("\n=== Processing Games How Long to Beat Dataset ===")
         hltb_df = create_hltb_dataframe()
         hltb_df.log_shape()
         hltb_df.handle_duplicates()
         
-        print(f"How Long to Beat dataset prepared: {len(hltb_df.df)} records")
+        logger.info(f"How Long to Beat dataset prepared: {len(hltb_df.df)} records")
         DataProcessor.save_dataframe(hltb_df, 'hltb')
         return hltb_df
 
@@ -122,7 +126,7 @@ class DataProcessor:
         with open(cache_path, 'wb') as f:
             pickle.dump(ztb_df, f)
         
-        print(f"Saved {dataset_name} to cache: {cache_path}")
+        logger.info(f"Saved {dataset_name} to cache: {cache_path}")
 
 
     @staticmethod
@@ -131,13 +135,13 @@ class DataProcessor:
         cache_path = DataProcessor._get_cache_path(dataset_name)
         
         if not cache_path.exists():
-            print(f"Cache not found for {dataset_name}")
+            logger.warning(f"Cache not found for {dataset_name}")
             return None
         
         with open(cache_path, 'rb') as f:
             ztb_df = pickle.load(f)
         
-        print(f"Loaded {dataset_name} from cache: {cache_path}")
+        logger.info(f"Loaded {dataset_name} from cache: {cache_path}")
         return ztb_df
 
 class DatabaseManager:
@@ -161,10 +165,10 @@ class DatabaseManager:
                 uri=os.getenv('MONGO_URI', "mongodb://user:password@localhost:27017/"),
                 database_name=os.getenv('DATABASE_NAME', "mongodb")
             )
-            print(" MongoDB importer initialized")
+            logger.info(" MongoDB importer initialized")
             return True
         except Exception as e:
-            print(f"XX MongoDB initialization failed: {e}")
+            logging.error(f"XX MongoDB initialization failed: {e}")
             return False
     
     def init_neo4j(self):
@@ -175,30 +179,30 @@ class DatabaseManager:
                 user=os.getenv('NEO4J_USER', "user"),
                 password=os.getenv('NEO4J_PASSWORD', "password")
             )
-            print(" Neo4j importer initialized")
+            logger.info(" Neo4j importer initialized")
             return True
         except Exception as e:
-            print(f"XX Neo4j initialization failed: {e}")
+            logging.error(f"XX Neo4j initialization failed: {e}")
             return False
     
     def init_postgresql(self):
         """Initialize PostgreSQL importer"""
         try:
             self.importers['postgresql'] = PostgreSQLImporter()
-            print(" PostgreSQL importer initialized")
+            logger.info(" PostgreSQL importer initialized")
             return True
         except Exception as e:
-            print(f"XX PostgreSQL initialization failed: {e}")
+            logging.error(f"XX PostgreSQL initialization failed: {e}")
             return False
     
     def import_to_mongodb(self, games_df, reviews_df, hltb_df, drop=False):
         """Import data to MongoDB"""
         if 'mongodb' not in self.importers:
-            print("MongoDB importer not initialized")
+            logger.info("MongoDB importer not initialized")
             return False
         
         try:
-            print("\n=== Importing to MongoDB ===")
+            logger.info("\n=== Importing to MongoDB ===")
             start_time = time.time()
             importer = self.importers['mongodb']
 
@@ -234,22 +238,22 @@ class DatabaseManager:
                 'drop_time': drop_time - start_time,
             }
             
-            print(f" MongoDB import completed - Games: {games_count}, Reviews: {reviews_count}, HLTBs: {hltb_count}")
+            logger.info(f" MongoDB import completed - Games: {games_count}, Reviews: {reviews_count}, HLTBs: {hltb_count}")
             return True
             
         except Exception as e:
-            print(f"XX MongoDB import failed: {e}")
+            logging.error(f"XX MongoDB import failed: {e}")
             self.results['mongodb'] = {'status': 'failed', 'error': str(e)}
             return False
     
     def import_to_neo4j(self, games_df, reviews_df, hltb_df, drop=False):
         """Import data to Neo4j"""
         if 'neo4j' not in self.importers:
-            print("Neo4j importer not initialized")
+            logger.info("Neo4j importer not initialized")
             return False
         
         try:
-            print("\n=== Importing to Neo4j ===")
+            logger.info("\n=== Importing to Neo4j ===")
             start_time = time.time()
             importer = self.importers['neo4j']
 
@@ -311,7 +315,7 @@ class DatabaseManager:
                 RETURN count(*) as linked
             """)
             linked_count = result.single()['linked']
-            print(f"  Linked {linked_count} HLTB records to games")
+            logger.info(f"  Linked {linked_count} HLTB records to games")
         
             relationships_time = time.time()
             
@@ -339,23 +343,23 @@ class DatabaseManager:
             }
             
 
-            print(f" Neo4j import completed - Games: {games_count}, Reviews: {reviews_count}, HLTB: {hltb_count}")
-            print(f"  Additional nodes - Developers: {devs_count}, Genres: {genres_count}")
+            logger.info(f" Neo4j import completed - Games: {games_count}, Reviews: {reviews_count}, HLTB: {hltb_count}")
+            logger.info(f"  Additional nodes - Developers: {devs_count}, Genres: {genres_count}")
             return True
             
         except Exception as e:
-            print(f"XX Neo4j import failed: {e}")
+            logger.error(f"XX Neo4j import failed: {e}")
             self.results['neo4j'] = {'status': 'failed', 'error': str(e)}
             return False
     
     def import_to_postgresql(self, games_df, reviews_df, hltb_df, drop = False):
         """Import data to PostgreSQL"""
         if 'postgresql' not in self.importers:
-            print("PostgreSQL importer not initialized")
+            logger.warning("PostgreSQL importer not initialized")
             return False
         
         try:
-            print("\n=== Importing to PostgreSQL ===")
+            logger.info("\n=== Importing to PostgreSQL ===")
             start_time = time.time()
             importer = self.importers['postgresql']
             
@@ -391,11 +395,11 @@ class DatabaseManager:
                 'drop_time': drop_time - start_time,
             }
             
-            print(f" PostgreSQL import completed - Games: {len(games_df.df)}, Reviews: {len(reviews_df.df)}, HLTBs: {len(hltb_df.df)}")
+            logger.info(f" PostgreSQL import completed - Games: {len(games_df.df)}, Reviews: {len(reviews_df.df)}, HLTBs: {len(hltb_df.df)}")
             return True
             
         except Exception as e:
-            print(f"XX PostgreSQL import failed: {e}")
+            logger.error(f"XX PostgreSQL import failed: {e}")
             self.results['postgresql'] = {'status': 'failed', 'error': str(e)}
             return False
     
@@ -405,9 +409,9 @@ class DatabaseManager:
             try:
                 if hasattr(importer, 'close'):
                     importer.close()
-                print(f" {db_name.title()} connection closed")
+                logger.info(f" {db_name.title()} connection closed")
             except Exception as e:
-                print(f"XX Error closing {db_name} connection: {e}")
+                logger.error(f"XX Error closing {db_name} connection: {e}")
     
     def print_summary(self):
         """Print import summary"""
@@ -437,3 +441,31 @@ class DatabaseManager:
             else:
                 print(f"  Error: {result.get('error', 'Unknown error')}")
             print()
+
+    def print_summary(self):
+        """Print import summary"""
+        logger.info("\n" + "="*60)
+        logger.info("IMPORT SUMMARY")
+        logger.info("="*60)
+        
+        for db_name, result in self.results.items():
+            status_symbol = "" if result['status'] == 'success' else "X"
+            logger.info(f"{status_symbol} {db_name.upper()}:")
+            
+            if result['status'] == 'success':
+                logger.info(f"   Games: {result.get('games', 'N/A')}")
+                logger.info(f"   Reviews: {result.get('reviews', 'N/A')}")
+                logger.info(f"   HLTBs: {result.get('hltbs', 'N/A')}")
+                if 'developers' in result:
+                    logger.info(f"   Developers: {result['developers']}")
+                if 'genres' in result:
+                    logger.info(f"   Genres: {result['genres']}")
+                logger.info("  Timings:")
+                logger.info(f"   Import Time: {result.get('import_time', 'N/A'):.2f}s")
+                logger.info(f"   Verify Time: {result.get('verify_time', 'N/A'):.2f}s")
+                if result.get('drop_time') != 0:
+                    logger.info(f"   Drop Time: {result.get('drop_time', 'N/A'):.2f}s")
+                if 'relationships_time' in result:
+                    logger.info(f"   Relationships Time: {result.get('relationships_time', 'N/A'):.2f}s")
+            else:
+                logger.error(f"  Error: {result.get('error', 'Unknown error')}")

@@ -45,11 +45,11 @@ def main():
         args.databases = ['mongodb', 'postgresql', 'neo4j']
         # args.databases = ['mongodb', 'postgresql']
     
-    print("Steam Dataset Multi-Database Importer")
-    print("====================================")
-    print(f"Target databases: {', '.join(args.databases)}")
-    print(f"Reviews limit: {args.reviews_limit}")
-    print(f"Use cache: {args.use_cache}")
+    logger.info("Steam Dataset Multi-Database Importer")
+    logger.info("====================================")
+    logger.info(f"Target databases: {', '.join(args.databases)}")
+    logger.info(f"Reviews limit: {args.reviews_limit}")
+    logger.info(f"Use cache: {args.use_cache}")
     
     try:
         # Process datasets once
@@ -91,10 +91,10 @@ def main():
             #         initialized_dbs.append(db_name)
         
         if not initialized_dbs:
-            print("XX No databases successfully initialized. Exiting.")
+            logger.error("XX No databases successfully initialized. Exiting.")
             return
         
-        print(f"\n Successfully initialized: {', '.join(initialized_dbs)}")
+        logger.info(f"\n Successfully initialized: {', '.join(initialized_dbs)}")
         
         import_func = {'mongodb': db_manager.import_to_mongodb,
                        'neo4j': db_manager.import_to_neo4j,
@@ -111,15 +111,16 @@ def main():
                 # elif db_name == 'postgresql':
                 #     db_manager.import_to_postgresql(games_df, reviews_df)
             except Exception as e:
-                print(f"XX Critical error during {db_name} import: {e}")
+                logger.error(f"XX Critical error during {db_name} import: {e}")
                 import traceback
                 traceback.print_exc()
         
         # Print summary
         db_manager.print_summary()
+        db_manager.log_summary()
         
     except Exception as e:
-        print(f"XX Critical error: {e}")
+        logger.error(f"XX Critical error: {e}")
         import traceback
         traceback.print_exc()
     

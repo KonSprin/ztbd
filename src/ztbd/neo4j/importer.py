@@ -32,21 +32,21 @@ class Neo4jImporter:
         Args:
             node_types: List of node labels to delete. If None, deletes everything.
         """
-        print(f"Cleaning Neo4j database...")
+        logger.info(f"Cleaning Neo4j database...")
         
         with self.driver.session() as session:
             if node_types is None:
                 # Delete all nodes and relationships
                 session.run("MATCH (n) DETACH DELETE n")
-                print("  Deleted all nodes and relationships")
+                logger.info("  Deleted all nodes and relationships")
             else:
                 # Delete specific node types
                 for node_type in node_types:
                     query = typing.cast(typing.LiteralString, f"MATCH (n:{node_type}) DETACH DELETE n")
                     result = session.run(query)
-                    print(f"  Deleted {node_type} nodes")
+                    logger.info(f"  Deleted {node_type} nodes")
         
-        print("Neo4j cleanup complete")
+        logger.info("Neo4j cleanup complete")
     
     def _create_constraints(self):
         """Create uniqueness constraints for primary keys"""

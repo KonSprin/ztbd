@@ -21,7 +21,7 @@ class PostgreSQLImporter:
             tables: List of table names to truncate. If None, truncates all tables.
         """
         try:
-            print(f"Cleaning PostgreSQL database...")
+            logger.info(f"Cleaning PostgreSQL database...")
             
             with engine.connect() as conn:
                 # if tables is None:
@@ -32,12 +32,12 @@ class PostgreSQLImporter:
                     # Use TRUNCATE with CASCADE to handle foreign key constraints
                     conn.execute(text(f'TRUNCATE TABLE "{table_name}" CASCADE'))
                     conn.commit()
-                    print(f"  Truncated table: {table_name}")
+                    logger.info(f"  Truncated table: {table_name}")
             
-            print("PostgreSQL cleanup complete")
+            logger.info("PostgreSQL cleanup complete")
             
         except Exception as e:
-            print(f"XX Error cleaning PostgreSQL database: {e}")
+            logger.error(f"XX Error cleaning PostgreSQL database: {e}")
             raise
     
     def clean_database(self, tables=[]):
@@ -48,23 +48,23 @@ class PostgreSQLImporter:
             tables: List of table names to drop. If None, drops all tables.
         """
         try:
-            print(f"Dropping PostgreSQL tables...")
+            logger.info(f"Dropping PostgreSQL tables...")
             
             # if tables is None:
             #     # Drop all tables using metadata
             #     Base.metadata.drop_all(bind=engine)
-            #     print("  Dropped all tables")
+            #     logger.info("  Dropped all tables")
             # else:
             with engine.connect() as conn:
                 for table_name in tables:
                     conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}" CASCADE'))
                     conn.commit()
-                    print(f"  Dropped table: {table_name}")
+                    logger.info(f"  Dropped table: {table_name}")
             
-            print("PostgreSQL drop complete")
+            logger.info("PostgreSQL drop complete")
             
         except Exception as e:
-            print(f"XX Error dropping PostgreSQL tables: {e}")
+            logger.error(f"XX Error dropping PostgreSQL tables: {e}")
             raise
     
     def import_df(self, ztb_df: ZTBDataFrame, json_columns=None):
@@ -72,7 +72,7 @@ class PostgreSQLImporter:
         try:
             table_name = ztb_df._name
 
-            print(f"Importing {len(ztb_df.df)} records to {table_name}...")
+            logger.info(f"Importing {len(ztb_df.df)} records to {table_name}...")
 
             # PostgreSQL-specific JSON column handling
             dtype_mapping = {}
@@ -87,10 +87,10 @@ class PostgreSQLImporter:
                 dtype=dtype_mapping,
             )
             
-            print(f"Imported {len(ztb_df.df)} records to {table_name}")
+            logger.info(f"Imported {len(ztb_df.df)} records to {table_name}")
             
         except Exception as e:
-            print(f"XX Error importing to PostgreSQL {table_name}: {e}")
+            logger.error(f"XX Error importing to PostgreSQL {table_name}: {e}")
             raise
         finally:
             engine.dispose()

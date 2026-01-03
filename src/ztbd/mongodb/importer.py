@@ -23,13 +23,13 @@ class MongoDBImporter:
         if collections is None:
             collections = self.db.list_collection_names()
         
-        print(f"Cleaning MongoDB database '{self.db.name}'...")
+        logger.info(f"Cleaning MongoDB database '{self.db.name}'...")
         for collection_name in collections:
             if collection_name in self.db.list_collection_names():
                 self.db[collection_name].drop()
-                print(f"  Dropped collection: {collection_name}")
+                logger.info(f"  Dropped collection: {collection_name}")
         
-        print("MongoDB cleanup complete")
+        logger.info("MongoDB cleanup complete")
     
     def clean_games(self):
         """Drop only the games collection"""
@@ -42,17 +42,17 @@ class MongoDBImporter:
     def import_games(self, ztb_df: ZTBDataFrame):
         logger.warning("USING DEPRECATED FUNCTION: use import_df() instead")
         """Import pre-cleaned games to MongoDB"""
-        print("Importing games to MongoDB...")
+        logger.info("Importing games to MongoDB...")
         
         # MongoDB-specific data cleaning (NaN handling)
         games_records = ztb_df.clean_nan_values()
         
         if games_records:
             result = self.db.games.insert_many(games_records)
-            print(f"Imported {len(result.inserted_ids)} games")
+            logger.info(f"Imported {len(result.inserted_ids)} games")
             
             # Create indexes
-            print("Creating indexes on games collection...")
+            logger.info("Creating indexes on games collection...")
             self.db.games.create_index([("appid", ASCENDING)], unique=True)
             self.db.games.create_index([("name", ASCENDING)])
             self.db.games.create_index([("release_date", ASCENDING)])
@@ -60,7 +60,7 @@ class MongoDBImporter:
     def import_reviews(self, ztb_df: ZTBDataFrame):
         """Import pre-cleaned reviews to MongoDB"""
         logger.warning("USING DEPRECATED FUNCTION: use import_df() instead")
-        print("Importing reviews to MongoDB...")
+        logger.info("Importing reviews to MongoDB...")
         
         # MongoDB-specific data cleaning (NaN handling)
         reviews_records = ztb_df.clean_nan_values()
@@ -74,12 +74,12 @@ class MongoDBImporter:
             result = self.db.reviews.insert_many(batch)
             total_inserted += len(result.inserted_ids)
             if total_inserted % 25000 == 0:  # Less frequent logging
-                print(f"  Inserted {total_inserted}/{len(reviews_records)} reviews...")
+                logger.info(f"  Inserted {total_inserted}/{len(reviews_records)} reviews...")
         
-        print(f"Imported {total_inserted} reviews")
+        logger.info(f"Imported {total_inserted} reviews")
         
         # Create indexes
-        print("Creating indexes on reviews collection...")
+        logger.info("Creating indexes on reviews collection...")
         self.db.reviews.create_index([("app_id", ASCENDING)])
         self.db.reviews.create_index([("review_id", ASCENDING)], unique=True)
         self.db.reviews.create_index([("recommended", ASCENDING)])
@@ -110,7 +110,7 @@ class MongoDBImporter:
             primary_key = indexes[0]
 
         # Create indexes
-        print(f"Creating indexes on {collection_name} collection...")
+        logger.info(f"Creating indexes on {collection_name} collection...")
         for index in indexes:
             if index == primary_key:
                 self.db[collection_name].create_index([(index, ASCENDING)], unique=True)

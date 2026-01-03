@@ -1,5 +1,7 @@
 import os
 import time
+import pickle
+from pathlib import Path
 
 from .ztbdf import create_games_dataframe, create_reviews_dataframe, create_hltb_dataframe
 from .mongodb.importer import MongoDBImporter
@@ -9,9 +11,16 @@ from .postgresql.importer import PostgreSQLImporter
 class DataProcessor:
     """Centralized data processing for all datasets"""
     
+    CACHE_DIR = Path(os.getenv('CACHE_DIR', "cache"))
+
     @staticmethod
-    def prepare_games_dataframe():
+    def prepare_games_dataframe(use_cache=False):
         """Prepare and clean games dataframe"""
+        if use_cache:
+            cached = DataProcessor.load_dataframe('games')
+            if cached:
+                return cached
+
         print("\n=== Processing Games Dataset ===")
         games_df = create_games_dataframe()
         games_df.log_shape()
@@ -29,11 +38,19 @@ class DataProcessor:
         games_df.handle_duplicates()
         
         print(f"Games dataset prepared: {len(games_df.df)} records")
+        DataProcessor.save_dataframe(games_df, 'games')
         return games_df
     
     @staticmethod
-    def prepare_reviews_dataframe(limit=1000000):
+    def prepare_reviews_dataframe(limit=1000000, use_cache=False):
         """Prepare and clean reviews dataframe"""
+        cache_name = f'reviews_{limit}'
+        
+        if use_cache:
+            cached = DataProcessor.load_dataframe(cache_name)
+            if cached:
+                return cached
+        
         print("\n=== Processing Reviews Dataset ===")
         reviews_df = create_reviews_dataframe()
         reviews_df.log_shape()
@@ -66,24 +83,62 @@ class DataProcessor:
         reviews_df.limit_records(limit)
         
         print(f" Reviews dataset prepared: {len(reviews_df.df)} records")
+        DataProcessor.save_dataframe(reviews_df, cache_name)
         return reviews_df
 
     @staticmethod
-    def prepare_hltb_dataframe():
+    def prepare_hltb_dataframe(use_cache=False):
         """Prepare and clean How Long to Beat dataframe"""
+        if use_cache:
+            cached = DataProcessor.load_dataframe('hltb')
+            if cached:
+                return cached
+
         print("\n=== Processing Games How Long to Beat Dataset ===")
         hltb_df = create_hltb_dataframe()
         hltb_df.log_shape()
-
-        # Convert date column
-        # hltb_df.convert_datetime_column('release_date')
-        
-        # Handle duplicates
         hltb_df.handle_duplicates()
         
         print(f"How Long to Beat dataset prepared: {len(hltb_df.df)} records")
+        DataProcessor.save_dataframe(hltb_df, 'hltb')
         return hltb_df
 
+    @staticmethod
+    def _ensure_cache_dir():
+        """Create cache directory if it doesn't exist"""
+        DataProcessor.CACHE_DIR.mkdir(exist_ok=True)
+    
+    @staticmethod
+    def _get_cache_path(dataset_name):
+        """Get cache file path for a dataset"""
+        return DataProcessor.CACHE_DIR / f"{dataset_name}_prepared.pkl"
+    
+    @staticmethod
+    def save_dataframe(ztb_df, dataset_name):
+        """Save prepared dataframe to cache"""
+        DataProcessor._ensure_cache_dir()
+        cache_path = DataProcessor._get_cache_path(dataset_name)
+        
+        with open(cache_path, 'wb') as f:
+            pickle.dump(ztb_df, f)
+        
+        print(f"Saved {dataset_name} to cache: {cache_path}")
+
+
+    @staticmethod
+    def load_dataframe(dataset_name):
+        """Load prepared dataframe from cache"""
+        cache_path = DataProcessor._get_cache_path(dataset_name)
+        
+        if not cache_path.exists():
+            print(f"Cache not found for {dataset_name}")
+            return None
+        
+        with open(cache_path, 'rb') as f:
+            ztb_df = pickle.load(f)
+        
+        print(f"Loaded {dataset_name} from cache: {cache_path}")
+        return ztb_df
 
 class DatabaseManager:
     """Manages database imports"""
@@ -150,6 +205,7 @@ class DatabaseManager:
             drop_time = start_time
             if drop:
                 importer.clean_database(['reviews', 'games', 'hltb'])
+                importer.verify_empty(['reviews', 'games', 'hltb'])
                 drop_time = time.time()
             
             # Import games (importer handles MongoDB-specific data cleaning)
@@ -200,6 +256,7 @@ class DatabaseManager:
             drop_time = start_time
             if drop:
                 importer.clean_database()  # Clean everything
+                importer.verify_empty()
                 drop_time = time.time()
             
             # Import games with relationships
@@ -224,6 +281,15 @@ class DatabaseManager:
                 indexes=['app_id', 'recommended', 'timestamp_created'],
                 batch_size=5000
             )
+
+            # Import HLTB data
+            importer.import_df(
+                hltb_df,
+                node_label='HLTB',
+                indexes=['game_game_name', 'game_comp_main', 'game_comp_all_count'],
+                batch_size=1000
+            )
+
             import_time = time.time()
             
             # Create REVIEWED relationships
@@ -233,6 +299,20 @@ class DatabaseManager:
                     MATCH (g:Game {appid: r.app_id})
                     MERGE (r)-[:REVIEWED]->(g)
                 """)
+
+
+            # Create HAS_PLAYTIME_DATA relationships
+            # Match by game name (case-insensitive)
+            result = session.run("""
+                MATCH (h:HLTB)
+                MATCH (g:Game)
+                WHERE toLower(h.game_game_name) = toLower(g.name)
+                MERGE (g)-[:HAS_PLAYTIME_DATA]->(h)
+                RETURN count(*) as linked
+            """)
+            linked_count = result.single()['linked']
+            print(f"  Linked {linked_count} HLTB records to games")
+        
             relationships_time = time.time()
             
             
@@ -242,6 +322,7 @@ class DatabaseManager:
                 reviews_count = session.run("MATCH (r:Review) RETURN count(r) as count").single()['count']
                 devs_count = session.run("MATCH (d:Developer) RETURN count(d) as count").single()['count']
                 genres_count = session.run("MATCH (g:Genre) RETURN count(g) as count").single()['count']
+                hltb_count = session.run("MATCH (h:HLTB) RETURN count(h) as count").single()['count']
             verify_time = time.time()
             
             self.results['neo4j'] = {
@@ -249,6 +330,7 @@ class DatabaseManager:
                 'reviews': reviews_count,
                 'developers': devs_count,
                 'genres': genres_count,
+                'hltbs': hltb_count,
                 'status': 'success',
                 'import_time': import_time - start_time,
                 'verify_time': verify_time - import_time,
@@ -256,7 +338,8 @@ class DatabaseManager:
                 'relationships_time': relationships_time - import_time,
             }
             
-            print(f" Neo4j import completed - Games: {games_count}, Reviews: {reviews_count}")
+
+            print(f" Neo4j import completed - Games: {games_count}, Reviews: {reviews_count}, HLTB: {hltb_count}")
             print(f"  Additional nodes - Developers: {devs_count}, Genres: {genres_count}")
             return True
             
@@ -278,7 +361,8 @@ class DatabaseManager:
             
             drop_time = start_time
             if drop:
-                importer.clean_database(['reviews', 'games'])
+                importer.clean_database(['reviews', 'games', 'hltb'])
+                importer.verify_empty(['reviews', 'games', 'hltb'])
                 drop_time = time.time()
 
             # Import games with JSON columns
@@ -332,21 +416,24 @@ class DatabaseManager:
         print("="*60)
         
         for db_name, result in self.results.items():
-            status_symbol = "" if result['status'] == 'success' else "✗"
+            status_symbol = "" if result['status'] == 'success' else "X"
             print(f"{status_symbol} {db_name.upper()}:")
             
             if result['status'] == 'success':
                 print(f"   Games: {result.get('games', 'N/A')}")
                 print(f"   Reviews: {result.get('reviews', 'N/A')}")
+                print(f"   HLTBs: {result.get('hltbs', 'N/A')}")
                 if 'developers' in result:
                     print(f"   Developers: {result['developers']}")
                 if 'genres' in result:
                     print(f"   Genres: {result['genres']}")
                 print("  Timings:")
-                print(f"   Import Time: {result.get('import_time', 'N/A')}")
-                print(f"   Verify Time: {result.get('verify_time', 'N/A')}")
+                print(f"   Import Time: {result.get('import_time', 'N/A'):.2f}s")
+                print(f"   Verify Time: {result.get('verify_time', 'N/A'):.2f}s")
                 if result.get('drop_time') != 0:
-                    print(f"   Drop Time: {result.get('drop_time', 'N/A')}")
+                    print(f"   Drop Time: {result.get('drop_time', 'N/A'):.2f}s")
+                if 'relationships_time' in result:
+                    print(f"   Relationships Time: {result.get('relationships_time', 'N/A'):.2f}s")
             else:
                 print(f"  Error: {result.get('error', 'Unknown error')}")
             print()

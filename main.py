@@ -2,11 +2,19 @@ import argparse
 from dotenv import load_dotenv
 from src.ztbd.db_manager import DatabaseManager, DataProcessor
 import logging
+from datetime import datetime
 
 load_dotenv()
 
 logger = logging.getLogger('ztbd')
-logging.basicConfig(format='%(levelname)s:%(asctime)s:%(message)s', level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s | %(levelname)-8s | %(lineno)04d | %(message)s')
+
+fh = logging.FileHandler('logs/{:%Y-%m-%d}-ztbd.log'.format(datetime.now()))
+formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(lineno)04d | %(message)s')
+fh.setFormatter(formatter)
+
+logger.addHandler(fh)
 
 def main():
     parser = argparse.ArgumentParser(description='Import Steam datasets to multiple databases')
@@ -27,6 +35,9 @@ def main():
     parser.add_argument('--drop-all', action='store_true',
                        help='Drop all databases before import')
     
+    parser.add_argument('--use-cache', action='store_true',
+                       help='Use cached prepared data if available')
+
     args = parser.parse_args()
     
     # Expand 'all' option
@@ -38,6 +49,7 @@ def main():
     print("====================================")
     print(f"Target databases: {', '.join(args.databases)}")
     print(f"Reviews limit: {args.reviews_limit}")
+    print(f"Use cache: {args.use_cache}")
     
     try:
         # Process datasets once
@@ -48,13 +60,16 @@ def main():
         hltb_df = None
         
         if not args.skip_games:
-            games_df = processor.prepare_games_dataframe()
+            games_df = processor.prepare_games_dataframe(use_cache=args.use_cache)
         
         if not args.skip_reviews:
-            reviews_df = processor.prepare_reviews_dataframe(limit=args.reviews_limit)
+            reviews_df = processor.prepare_reviews_dataframe(
+                limit=args.reviews_limit, 
+                use_cache=args.use_cache
+            )
         
         if not args.skip_hltb:
-            hltb_df = processor.prepare_hltb_dataframe()
+            hltb_df = processor.prepare_hltb_dataframe(use_cache=args.use_cache)
         
         # Initialize database manager
         db_manager = DatabaseManager()

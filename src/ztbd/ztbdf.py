@@ -89,7 +89,7 @@ class ZTBDataFrame:
             self._df = self._df.sort_values(column)
             logger.info(f"Sorted by {column}")
     
-    def handle_duplicates(self, key_column="", output_file='duplicates.csv'):
+    def handle_duplicates(self, key_column="", output_file='cache/duplicates.csv'):
         """Identify duplicates, save them to file, and return deduplicated dataframe"""
         logger.info(f"Checking for duplicates. Original rows: {len(self._df)}")
         

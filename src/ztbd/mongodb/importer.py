@@ -116,3 +116,38 @@ class MongoDBImporter:
                 self.db[collection_name].create_index([(index, ASCENDING)], unique=True)
             else:
                 self.db[collection_name].create_index([(index, ASCENDING)])
+
+    def verify_empty(self, collections=None):
+        """
+        Verify that collections are empty or don't exist
+        
+        Args:
+            collections: List of collection names to verify. If None, checks common collections.
+        
+        Returns:
+            bool: True if all collections are empty/don't exist, False otherwise
+        """
+        if collections is None:
+            collections = ['games', 'reviews', 'hltb']
+        
+        logger.info(f"Verifying MongoDB collections are dropped...")
+        all_empty = True
+        existing_collections = self.db.list_collection_names()
+        
+        for collection_name in collections:
+            if collection_name in existing_collections:
+                count = self.db[collection_name].count_documents({})
+                if count > 0:
+                    logger.error(f"{collection_name} still has {count} documents")
+                    all_empty = False
+                else:
+                    logger.info(f"  OK: {collection_name} exists but is empty")
+            else:
+                logger.info(f"  OK: {collection_name} does not exist")
+        
+        if all_empty:
+            logger.info("MongoDB verification: All collections dropped successfully")
+        else:
+            logger.error("MongoDB verification: FAILED - some collections still have data")
+        
+        return all_empty

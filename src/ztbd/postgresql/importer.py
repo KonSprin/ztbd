@@ -4,6 +4,11 @@ from .database import engine
 from .models import Base
 from ..ztbdf import ZTBDataFrame
 
+import logging
+
+logger = logging.getLogger('ztbd')
+
+
 class PostgreSQLImporter:
     def __init__(self):
         Base.metadata.create_all(bind=engine)
@@ -89,3 +94,57 @@ class PostgreSQLImporter:
             raise
         finally:
             engine.dispose()
+
+    def verify_empty(self, tables=None):
+        """
+        Verify that tables are empty or don't exist
+        
+        Args:
+            tables: List of table names to verify. If None, checks common tables.
+        
+        Returns:
+            bool: True if all tables are empty/don't exist, False otherwise
+        """
+        if tables is None:
+            tables = ['games', 'reviews', 'hltb']
+        
+        logger.info(f"Verifying PostgreSQL tables are dropped...")
+        all_empty = True
+        
+        try:
+            with engine.connect() as conn:
+                for table_name in tables:
+                    # Check if table exists
+                    result = conn.execute(text("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables 
+                            WHERE table_schema = 'public' 
+                            AND table_name = :table_name
+                        )
+                    """), {"table_name": table_name})
+                    
+                    exists = result.scalar()
+                    
+                    if exists:
+                        # Table exists, check if it has data
+                        result = conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"'))
+                        count = result.scalar()
+                        
+                        if count > 0:
+                            logger.error(f"{table_name} still has {count} rows")
+                            all_empty = False
+                        else:
+                            logger.info(f"  OK: {table_name} exists but is empty")
+                    else:
+                        logger.info(f"  OK: {table_name} does not exist")
+            
+            if all_empty:
+                logger.info("PostgreSQL verification: All tables dropped successfully")
+            else:
+                logger.error("PostgreSQL verification: FAILED - some tables still have data")
+            
+            return all_empty
+            
+        except Exception as e:
+            logger.error(f"XX Error verifying PostgreSQL tables: {e}")
+            return False

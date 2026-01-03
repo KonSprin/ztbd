@@ -252,3 +252,57 @@ class Neo4jImporter:
             session.run(query)
         
         logger.info("Completed creating REVIEWED relationships")
+
+    def verify_empty(self, node_types=None):
+        """
+        Verify that database is empty
+        
+        Args:
+            node_types: List of node labels to verify. If None, checks all nodes.
+        
+        Returns:
+            bool: True if database is empty, False otherwise
+        """
+        logger.info(f"Verifying Neo4j database is empty...")
+        all_empty = True
+        
+        with self.driver.session() as session:
+            if node_types is None:
+                # Check total node count
+                result = session.run("MATCH (n) RETURN count(n) as count")
+                total_count = result.single()['count']
+                
+                if total_count > 0:
+                    logger.error(f"Database still has {total_count} nodes")
+                    all_empty = False
+                    
+                    # Show breakdown by label
+                    result = session.run("""
+                        MATCH (n)
+                        RETURN labels(n)[0] as label, count(n) as count
+                        ORDER BY count DESC
+                    """)
+                    for record in result:
+                        logger.debug(f"    - {record['label']}: {record['count']} nodes")
+                else:
+                    logger.info(f"  OK: Database is empty")
+            else:
+                # Check specific node types
+                for node_type in node_types:
+                    query = f"MATCH (n:{node_type}) RETURN count(n) as count"
+                    query = typing.cast(typing.LiteralString, query)
+                    result = session.run(query)
+                    count = result.single()['count']
+                    
+                    if count > 0:
+                        logger.error(f"{node_type} still has {count} nodes")
+                        all_empty = False
+                    else:
+                        logger.info(f"  OK: {node_type} does not exist or is empty")
+        
+        if all_empty:
+            logger.info("Neo4j verification: Database dropped successfully")
+        else:
+            logger.error("Neo4j verification: FAILED - database still has data")
+        
+        return all_empty

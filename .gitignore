@@ -3,7 +3,11 @@ __pycache__
 .env
 */config
 
+logs/
 *.log
+
+cache/
+*.pkl
 *.csv
 
 old-*

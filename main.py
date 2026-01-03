@@ -19,7 +19,7 @@ logger.addHandler(fh)
 def main():
     parser = argparse.ArgumentParser(description='Import Steam datasets to multiple databases')
     parser.add_argument('--databases', '-d', nargs='+', 
-                       choices=['mongodb', 'neo4j', 'postgresql', 'all'],
+                       choices=['mongodb', 'neo4j', 'postgresql', 'mysql', 'all'],
                        default=['all'],
                        help='Databases to import to (default: all)')
     parser.add_argument('--reviews-limit', '-r', type=int, default=1000000,
@@ -40,10 +40,8 @@ def main():
 
     args = parser.parse_args()
     
-    # Expand 'all' option
     if 'all' in args.databases:
-        args.databases = ['mongodb', 'postgresql', 'neo4j']
-        # args.databases = ['mongodb', 'postgresql']
+        args.databases = ['mongodb', 'postgresql', 'neo4j', 'mysql']
     
     logger.info("Steam Dataset Multi-Database Importer")
     logger.info("====================================")
@@ -52,7 +50,6 @@ def main():
     logger.info(f"Use cache: {args.use_cache}")
     
     try:
-        # Process datasets once
         processor = DataProcessor()
         
         games_df = None
@@ -79,16 +76,6 @@ def main():
         for db_name in args.databases:
             if db_manager.init_db(db_name):
                 initialized_dbs.append(db_name)
-
-            # if db_name == 'mongodb':
-            #     if db_manager.init_mongodb():
-            #         initialized_dbs.append(db_name)
-            # elif db_name == 'neo4j':
-            #     if db_manager.init_neo4j():
-            #         initialized_dbs.append(db_name)
-            # elif db_name == 'postgresql':
-            #     if db_manager.init_postgresql():
-            #         initialized_dbs.append(db_name)
         
         if not initialized_dbs:
             logger.error("XX No databases successfully initialized. Exiting.")
@@ -98,18 +85,13 @@ def main():
         
         import_func = {'mongodb': db_manager.import_to_mongodb,
                        'neo4j': db_manager.import_to_neo4j,
-                       'postgresql': db_manager.import_to_postgresql}
+                       'postgresql': db_manager.import_to_postgresql,
+                       'mysql': db_manager.import_to_mysql}
 
         # Import to each database
         for db_name in initialized_dbs:
             try:
                 import_func[db_name](games_df, reviews_df, hltb_df, args.drop_all)
-                # if db_name == 'mongodb':
-                #     db_manager.import_to_mongodb(games_df, reviews_df)
-                # elif db_name == 'neo4j':
-                #     db_manager.import_to_neo4j(games_df, reviews_df)
-                # elif db_name == 'postgresql':
-                #     db_manager.import_to_postgresql(games_df, reviews_df)
             except Exception as e:
                 logger.error(f"XX Critical error during {db_name} import: {e}")
                 import traceback

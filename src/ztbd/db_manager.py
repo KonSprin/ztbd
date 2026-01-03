@@ -7,6 +7,7 @@ from .ztbdf import create_games_dataframe, create_reviews_dataframe, create_hltb
 from .mongodb.importer import MongoDBImporter
 from .neo4j.importer import Neo4jImporter
 from .postgresql.importer import PostgreSQLImporter
+from .mysql.importer import MySQLImporter
 
 import logging
 
@@ -155,7 +156,8 @@ class DatabaseManager:
         """Initialize Any DB importer"""
         funcs = {'neo4j': self.init_neo4j,
                  'mongodb': self.init_mongodb,
-                 'postgresql': self.init_postgresql}
+                 'postgresql': self.init_postgresql,
+                 'mysql': self.init_mysql}
         return funcs[name]()
     
     def init_mongodb(self):
@@ -193,6 +195,16 @@ class DatabaseManager:
             return True
         except Exception as e:
             logging.error(f"XX PostgreSQL initialization failed: {e}")
+            return False
+    
+    def init_mysql(self):
+        """Initialize MySQL importer"""
+        try:
+            self.importers['mysql'] = MySQLImporter()
+            logger.info(" MySQL importer initialized")
+            return True
+        except Exception as e:
+            logging.error(f" MySQL initialization failed: {e}")
             return False
     
     def import_to_mongodb(self, games_df, reviews_df, hltb_df, drop=False):
@@ -259,7 +271,7 @@ class DatabaseManager:
 
             drop_time = start_time
             if drop:
-                importer.clean_database()  # Clean everything
+                importer.clean_database()
                 importer.verify_empty()
                 drop_time = time.time()
             
@@ -342,7 +354,6 @@ class DatabaseManager:
                 'relationships_time': relationships_time - import_time,
             }
             
-
             logger.info(f" Neo4j import completed - Games: {games_count}, Reviews: {reviews_count}, HLTB: {hltb_count}")
             logger.info(f"  Additional nodes - Developers: {devs_count}, Genres: {genres_count}")
             return True
@@ -352,7 +363,7 @@ class DatabaseManager:
             self.results['neo4j'] = {'status': 'failed', 'error': str(e)}
             return False
     
-    def import_to_postgresql(self, games_df, reviews_df, hltb_df, drop = False):
+    def import_to_postgresql(self, games_df, reviews_df, hltb_df, drop=False):
         """Import data to PostgreSQL"""
         if 'postgresql' not in self.importers:
             logger.warning("PostgreSQL importer not initialized")
@@ -377,7 +388,7 @@ class DatabaseManager:
             
             # Import reviews
             importer.import_df(reviews_df)
-            
+
             importer.import_df(hltb_df)
 
             import_time = time.time()
@@ -401,6 +412,51 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"XX PostgreSQL import failed: {e}")
             self.results['postgresql'] = {'status': 'failed', 'error': str(e)}
+            return False
+    
+    def import_to_mysql(self, games_df, reviews_df, hltb_df, drop=False):
+        """Import data to MySQL"""
+        if 'mysql' not in self.importers:
+            logger.warning("MySQL importer not initialized")
+            return False
+        
+        try:
+            logger.info("\n=== Importing to MySQL ===")
+            start_time = time.time()
+            importer = self.importers['mysql']
+            
+            drop_time = start_time
+            if drop:
+                importer.clean_database(['reviews', 'games', 'hltb'])
+                importer.verify_empty(['reviews', 'games', 'hltb'])
+                drop_time = time.time()
+
+            games_json_cols = ['supported_languages', 'full_audio_languages', 'packages', 
+                              'developers', 'publishers', 'categories', 'genres', 
+                              'screenshots', 'movies', 'tags']
+            importer.import_df(games_df, json_columns=games_json_cols)
+            importer.import_df(reviews_df)
+            importer.import_df(hltb_df)
+
+            import_time = time.time()
+            verify_time = time.time()
+            
+            self.results['mysql'] = {
+                'games': len(games_df.df),
+                'reviews': len(reviews_df.df),
+                'hltbs': len(hltb_df.df),
+                'status': 'success',
+                'import_time': import_time - start_time,
+                'verify_time': verify_time - import_time,
+                'drop_time': drop_time - start_time,
+            }
+            
+            logger.info(f" MySQL import completed - Games: {len(games_df.df)}, Reviews: {len(reviews_df.df)}, HLTBs: {len(hltb_df.df)}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"XX MySQL import failed: {e}")
+            self.results['mysql'] = {'status': 'failed', 'error': str(e)}
             return False
     
     def close_connections(self):
@@ -442,8 +498,8 @@ class DatabaseManager:
                 print(f"  Error: {result.get('error', 'Unknown error')}")
             print()
 
-    def print_summary(self):
-        """Print import summary"""
+    def log_summary(self):
+        """Log import summary"""
         logger.info("\n" + "="*60)
         logger.info("IMPORT SUMMARY")
         logger.info("="*60)

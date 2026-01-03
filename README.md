@@ -50,3 +50,13 @@ POSTGRESQL:
    Verify Time: 71.1950330734253
    Drop Time: 40.20628261566162
 ```
+```
+MYSQL:
+  Games: 89618
+  Reviews: 1000000
+  HLTBs: 147474
+ Timings:
+  Import Time: 211.13s
+  Verify Time: 0.00s
+  Drop Time: 0.62s
+```

@@ -41,7 +41,7 @@ def main():
     args = parser.parse_args()
     
     if 'all' in args.databases:
-        args.databases = ['mongodb', 'postgresql', 'neo4j', 'mysql']
+        args.databases = ['postgresql', 'mysql', 'mongodb', 'neo4j']
     
     logger.info("Steam Dataset Multi-Database Importer")
     logger.info("====================================")
@@ -67,10 +67,13 @@ def main():
         
         if not args.skip_hltb:
             hltb_df = processor.prepare_hltb_dataframe(use_cache=args.use_cache)
-        
+
         # Initialize database manager
         db_manager = DatabaseManager()
         
+        if games_df and reviews_df:
+            db_manager.prepare_normalized_data(games_df, reviews_df)
+
         # Initialize requested databases
         initialized_dbs = []
         for db_name in args.databases:

@@ -2,6 +2,7 @@ from neo4j import GraphDatabase
 from ..ztbdf import ZTBDataFrame
 import typing
 import logging
+import pandas as pd
 
 logger = logging.getLogger('ztbd')
 
@@ -133,6 +134,53 @@ class Neo4jImporter:
         if relationship_configs:
             self._create_relationships(ztb_df, node_label, relationship_configs, batch_size)
     
+    def import_dataframe(self, df, node_label, primary_key, indexes=None, batch_size=1000):
+        """
+        Import a regular pandas DataFrame to Neo4j as nodes
+        
+        Args:
+            df: pandas DataFrame to import
+            node_label: Label for the nodes
+            primary_key: Name of the primary key column
+            indexes: List of properties to index
+            batch_size: Batch size for insertion
+        """
+        try:
+            logger.info(f"Importing {len(df)} records as {node_label} nodes...")
+            
+            records = df.to_dict('records')
+            
+            # Clean NaN values
+            for record in records:
+                for key, value in list(record.items()):
+                    if isinstance(value, float) and pd.isna(value):
+                        record[key] = None
+            
+            with self.driver.session() as session:
+                for i in range(0, len(records), batch_size):
+                    batch = records[i:i + batch_size]
+                    
+                    query = f"""
+                    UNWIND $batch AS record
+                    MERGE (n:{node_label} {{`{primary_key}`: record.`{primary_key}`}})
+                    SET n += record
+                    """
+                    query = typing.cast(typing.LiteralString, query)
+                    
+                    session.run(query, batch=batch)
+                    
+                    if (i + batch_size) % (batch_size * 5) == 0:
+                        logger.info(f"  Imported {min(i + batch_size, len(records))}/{len(records)} nodes")
+            
+            if indexes:
+                self._create_indexes(node_label, indexes)
+            
+            logger.info(f"Completed import of {len(records)} {node_label} nodes")
+            
+        except Exception as e:
+            logger.error(f"XX Error importing DataFrame to Neo4j: {e}")
+            raise
+
     def _create_relationships(self, ztb_df, source_label, relationship_configs, batch_size):
         """Create relationships based on configuration"""
         for config in relationship_configs:

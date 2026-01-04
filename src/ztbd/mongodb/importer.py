@@ -1,6 +1,7 @@
 from pymongo import MongoClient, ASCENDING
 from ..ztbdf import ZTBDataFrame
 import logging
+import pandas as pd
 
 logger = logging.getLogger('ztbd')
 
@@ -116,6 +117,50 @@ class MongoDBImporter:
                 self.db[collection_name].create_index([(index, ASCENDING)], unique=True)
             else:
                 self.db[collection_name].create_index([(index, ASCENDING)])
+
+    def import_dataframe(self, df, collection_name, indexes=None, batch_size=0):
+        """
+        Import a regular pandas DataFrame to MongoDB
+        
+        Args:
+            df: pandas DataFrame to import
+            collection_name: Name of the collection
+            indexes: List of fields to index
+            batch_size: Batch size for insertion (0 = all at once)
+        """
+        try:
+            logger.info(f"Importing {len(df)} records to {collection_name}...")
+            
+            records = df.to_dict('records')
+            
+            # Clean NaN values
+            for record in records:
+                for key, value in list(record.items()):
+                    if isinstance(value, float) and pd.isna(value):
+                        record[key] = None
+            
+            if batch_size > 0:
+                total_inserted = 0
+                for i in range(0, len(records), batch_size):
+                    batch = records[i:i + batch_size]
+                    result = self.db[collection_name].insert_many(batch)
+                    total_inserted += len(result.inserted_ids)
+                    if total_inserted % (batch_size * 5) == 0:
+                        logger.info(f"  Inserted {total_inserted}/{len(records)} records...")
+            else:
+                result = self.db[collection_name].insert_many(records)
+                logger.info(f"  Imported {len(result.inserted_ids)} records")
+            
+            if indexes:
+                logger.info(f"Creating indexes on {collection_name}...")
+                for index in indexes:
+                    self.db[collection_name].create_index([(index, ASCENDING)])
+            
+            logger.info(f"Completed import to {collection_name}")
+            
+        except Exception as e:
+            logger.error(f"XX Error importing to MongoDB {collection_name}: {e}")
+            raise
 
     def verify_empty(self, collections=None):
         """

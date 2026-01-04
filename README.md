@@ -60,3 +60,20 @@ MYSQL:
   Verify Time: 0.00s
   Drop Time: 0.62s
 ```
+
+---
+More tables
+
+```
+============================================================
+IMPORT SUMMARY
+============================================================
+ MYSQL:
+   Games: 89618
+   Reviews: 1000000
+   HLTBs: 147474
+  Timings:
+   Import Time: 313.23s
+   Verify Time: 0.00s
+   Drop Time: 4.39s
+```

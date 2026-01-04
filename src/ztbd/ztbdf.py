@@ -174,16 +174,16 @@ def create_reviews_dataframe():
         name="reviews"
     )
 
-def create_top100_dataframe():
-    """
-    This dataset contains the average players by month for the current top 100 games. It was scraped off https://steamcharts.com/top and converted into this easier to analyze format. 
-    """
-    return ZTBDataFrame(
-        dataset="jackogozaly/steam-player-data",
-        csv_filename="Valve_Player_Data.csv",
-        primary_key="",
-        name="top100"
-    )
+# def create_top100_dataframe():
+#     """
+#     This dataset contains the average players by month for the current top 100 games. It was scraped off https://steamcharts.com/top and converted into this easier to analyze format. 
+#     """
+#     return ZTBDataFrame(
+#         dataset="jackogozaly/steam-player-data",
+#         csv_filename="Valve_Player_Data.csv",
+#         primary_key="",
+#         name="top100"
+#     )
 
 def create_hltb_dataframe():
     """

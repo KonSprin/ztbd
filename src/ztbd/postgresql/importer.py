@@ -95,6 +95,37 @@ class PostgreSQLImporter:
         finally:
             engine.dispose()
 
+    def import_dataframe(self, df, table_name, json_columns=None):
+        """
+        Import a regular pandas DataFrame (for normalized tables)
+        
+        Args:
+            df: pandas DataFrame to import
+            table_name: Name of the table
+            json_columns: List of column names that contain JSON data
+        """
+        try:
+            logger.info(f"Importing {len(df)} records to {table_name}...")
+
+            dtype_mapping = {}
+            if json_columns:
+                dtype_mapping = {key: sqlalchemy.types.JSON for key in json_columns}
+            
+            df.to_sql(
+                name=table_name,
+                con=engine,
+                if_exists='append',
+                index=False,
+                chunksize=1000,
+                dtype=dtype_mapping,
+            )
+            
+            logger.info(f"  Imported {len(df)} records to {table_name}")
+            
+        except Exception as e:
+            logger.error(f"XX Error importing to {table_name}: {e}")
+            raise
+
     def verify_empty(self, tables=None):
         """
         Verify that tables are empty or don't exist

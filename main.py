@@ -84,7 +84,7 @@ def main():
             logger.error("XX No databases successfully initialized. Exiting.")
             return
         
-        logger.info(f"\n Successfully initialized: {', '.join(initialized_dbs)}")
+        logger.info(f"Successfully initialized: {', '.join(initialized_dbs)}")
         
         import_func = {'mongodb': db_manager.import_to_mongodb,
                        'neo4j': db_manager.import_to_neo4j,

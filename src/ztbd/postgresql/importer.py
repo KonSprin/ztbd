@@ -159,7 +159,7 @@ class PostgreSQLImporter:
                     if exists:
                         # Table exists, check if it has data
                         result = conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"'))
-                        count = result.scalar()
+                        count = result.scalar() or 0
                         
                         if count > 0:
                             logger.error(f"{table_name} still has {count} rows")

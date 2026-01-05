@@ -27,7 +27,7 @@ class DataProcessor:
             if cached:
                 return cached
 
-        logger.info("\n=== Processing Games Dataset ===")
+        logger.info("== Processing Games Dataset ===")
         games_df = create_games_dataframe()
         games_df.log_shape()
         
@@ -57,7 +57,7 @@ class DataProcessor:
             if cached:
                 return cached
         
-        logger.info("\n=== Processing Reviews Dataset ===")
+        logger.info("== Processing Reviews Dataset ===")
         reviews_df = create_reviews_dataframe()
         reviews_df.log_shape()
         
@@ -100,7 +100,7 @@ class DataProcessor:
             if cached:
                 return cached
 
-        logger.info("\n=== Processing Games How Long to Beat Dataset ===")
+        logger.info("== Processing Games How Long to Beat Dataset ===")
         hltb_df = create_hltb_dataframe()
         hltb_df.log_shape()
         hltb_df.handle_duplicates()
@@ -214,7 +214,7 @@ class DatabaseManager:
         Prepare all normalized tables from the main dataframes
         Call this once before importing to any database
         """
-        logger.info("\n=== PREPARING NORMALIZED DATA ===")
+        logger.info("=== PREPARING NORMALIZED DATA ===")
         
         # Extract dimension tables
         self.normalized_data['developers'] = DataNormalizer.extract_developers(games_df)
@@ -266,7 +266,7 @@ class DatabaseManager:
             return False
         
         try:
-            logger.info("\n=== Importing to MongoDB ===")
+            logger.info("== Importing to MongoDB ===")
             start_time = time.time()
             importer = self.importers['mongodb']
 
@@ -284,58 +284,111 @@ class DatabaseManager:
                 importer.verify_empty(tables_to_drop)
                 drop_time = time.time()
             
-            # Import games (importer handles MongoDB-specific data cleaning)
-            importer.import_df(games_df, indexes = ["appid", "name", "release_date"])
-
-            # Import reviews
-            importer.import_df(reviews_df, indexes = ["review_id", "app_id", "recommended", "timestamp_created"], batch_size = 5000)
-
-            # Import hltb
-            importer.import_df(hltb_df, indexes = ["game_game_id", "game_game_name", "game_comp_all_count"])
-
-            # Import normalized tables
+            # Import main tables
+            importer.import_df(games_df, indexes=["appid", "name", "release_date"])
+            importer.import_df(reviews_df, indexes=["review_id", "app_id", "recommended", "timestamp_created"], batch_size=5000)
+            importer.import_df(hltb_df, indexes=["game_game_id", "game_game_name", "game_comp_all_count"])
+            
+            # Import normalized tables if available
             if self.normalized_data:
-                logger.info("\nImporting normalized tables...")
+                normalized_time = time.time()
+                logger.info("Importing normalized tables to MongoDB...")
                 
-                # Import dimension tables first
-                for table in ['developers', 'publishers', 'genres', 'categories', 'tags']:
-                    importer.import_dataframe(
-                        self.normalized_data[table], 
-                        collection_name=table
-                    )
+                # Import dimension tables
+                importer.import_dataframe(
+                    self.normalized_data['developers'], 
+                    collection_name='developers',
+                    indexes=['developer_id', 'name']
+                )
+                importer.import_dataframe(
+                    self.normalized_data['publishers'], 
+                    collection_name='publishers',
+                    indexes=['publisher_id', 'name']
+                )
+                importer.import_dataframe(
+                    self.normalized_data['genres'], 
+                    collection_name='genres',
+                    indexes=['genre_id', 'name']
+                )
+                importer.import_dataframe(
+                    self.normalized_data['categories'], 
+                    collection_name='categories',
+                    indexes=['category_id', 'name']
+                )
+                importer.import_dataframe(
+                    self.normalized_data['tags'], 
+                    collection_name='tags',
+                    indexes=['tag_id', 'name']
+                )
                 
                 # Import association tables
-                for table in ['game_developers', 'game_publishers', 'game_genres', 
-                            'game_categories', 'game_tags']:
-                    importer.import_dataframe(
-                        self.normalized_data[table], 
-                        collection_name=table
-                    )
+                importer.import_dataframe(
+                    self.normalized_data['game_developers'], 
+                    collection_name='game_developers',
+                    indexes=['game_appid', 'developer_id']
+                )
+                importer.import_dataframe(
+                    self.normalized_data['game_publishers'], 
+                    collection_name='game_publishers',
+                    indexes=['game_appid', 'publisher_id']
+                )
+                importer.import_dataframe(
+                    self.normalized_data['game_genres'], 
+                    collection_name='game_genres',
+                    indexes=['game_appid', 'genre_id']
+                )
+                importer.import_dataframe(
+                    self.normalized_data['game_categories'], 
+                    collection_name='game_categories',
+                    indexes=['game_appid', 'category_id']
+                )
+                importer.import_dataframe(
+                    self.normalized_data['game_tags'], 
+                    collection_name='game_tags',
+                    indexes=['game_appid', 'tag_id'],
+                    batch_size=5000
+                )
                 
                 # Import aggregation tables
                 importer.import_dataframe(
                     self.normalized_data['user_profiles'], 
-                    collection_name='user_profiles'
+                    collection_name='user_profiles',
+                    indexes=['author_steamid']
                 )
                 importer.import_dataframe(
                     self.normalized_data['game_review_summary'], 
-                    collection_name='game_review_summary'
+                    collection_name='game_review_summary',
+                    indexes=['game_appid']
                 )
                 importer.import_dataframe(
                     self.normalized_data['developer_stats'], 
-                    collection_name='developer_stats'
+                    collection_name='developer_stats',
+                    indexes=['developer_id']
                 )
                 importer.import_dataframe(
                     self.normalized_data['game_price_history'], 
-                    collection_name='game_price_history'
+                    collection_name='game_price_history',
+                    indexes=['game_appid', 'recorded_date'],
+                    batch_size=5000
                 )
-
+            
             import_time = time.time()
             
             # Verify imports
             games_count = importer.db.games.count_documents({})
             reviews_count = importer.db.reviews.count_documents({})
             hltb_count = importer.db.hltb.count_documents({})
+            
+            normalized_counts = {}
+            if self.normalized_data:
+                normalized_counts = {
+                    'developers': importer.db.developers.count_documents({}),
+                    'publishers': importer.db.publishers.count_documents({}),
+                    'genres': importer.db.genres.count_documents({}),
+                    'categories': importer.db.categories.count_documents({}),
+                    'tags': importer.db.tags.count_documents({}),
+                }
+            
             verify_time = time.time()
             
             self.results['mongodb'] = {
@@ -347,16 +400,20 @@ class DatabaseManager:
                 'import_time': import_time - start_time,
                 'verify_time': verify_time - import_time,
                 'drop_time': drop_time - start_time,
+                'normalized_time': normalized_time - import_time if self.normalized_data else 0,
             }
             
             logger.info(f" MongoDB import completed - Games: {games_count}, Reviews: {reviews_count}, HLTBs: {hltb_count}")
+            if normalized_counts:
+                logger.info(f"  Normalized - Developers: {normalized_counts['developers']}, Publishers: {normalized_counts['publishers']}")
             return True
             
         except Exception as e:
-            logging.error(f"XX MongoDB import failed: {e}")
+            logger.error(f"XX MongoDB import failed: {e}")
             self.results['mongodb'] = {'status': 'failed', 'error': str(e)}
             return False
-    
+
+
     def import_to_neo4j(self, games_df, reviews_df, hltb_df, drop=False):
         """Import data to Neo4j"""
         if 'neo4j' not in self.importers:
@@ -364,14 +421,15 @@ class DatabaseManager:
             return False
         
         try:
-            logger.info("\n=== Importing to Neo4j ===")
+            logger.info("== Importing to Neo4j ===")
             start_time = time.time()
             importer = self.importers['neo4j']
 
             drop_time = start_time
             if drop:
-                importer.clean_database()
-                importer.verify_empty()
+                # Don't drop - takes to much time to reimport
+                # importer.clean_database()
+                # importer.verify_empty()
                 drop_time = time.time()
             
             # Import games with relationships
@@ -382,96 +440,213 @@ class DatabaseManager:
                 {'type': 'HAS_CATEGORY', 'target_label': 'Category', 'source_key': 'categories'}
             ]
             
-            importer.import_df(
-                games_df, 
-                node_label='Game',
-                indexes=['name', 'release_date', 'price'],
-                relationship_configs=relationship_configs
-            )
+            if games_df:
+                importer.import_df(
+                    games_df, 
+                    node_label='Game',
+                    indexes=['name', 'release_date', 'price'],
+                    relationship_configs=relationship_configs
+                )
             
             # Import reviews
-            importer.import_df(
-                reviews_df,
-                node_label='Review',
-                indexes=['app_id', 'recommended', 'timestamp_created'],
-                batch_size=5000
-            )
+            if reviews_df:
+                importer.import_df(
+                    reviews_df,
+                    node_label='Review',
+                    indexes=['app_id', 'recommended', 'timestamp_created'],
+                    batch_size=5000
+                )
 
             # Import HLTB data
-            importer.import_df(
-                hltb_df,
-                node_label='HLTB',
-                indexes=['game_game_name', 'game_comp_main', 'game_comp_all_count'],
-                batch_size=1000
-            )
+            if hltb_df:
+                importer.import_df(
+                    hltb_df,
+                    node_label='HLTB',
+                    indexes=['game_game_name', 'game_comp_main', 'game_comp_all_count'],
+                    batch_size=1000
+                )
 
             # Import normalized tables
             if self.normalized_data:
-                logger.info("\nImporting normalized tables...")
+                normalized_time = time.time()
+                logger.info("\nImporting normalized dimension tables to Neo4j...")
                 
-                # Import dimension tables first
-                for table in ['developers', 'publishers', 'genres', 'categories', 'tags']:
-                    importer.import_dataframe(
-                        self.normalized_data[table], 
-                        table_name=table,
-                        primary_key=table
-                    )
+                # Primary key mapping for each table
+                pk_mapping = {
+                    'developers': 'developer_id',
+                    'publishers': 'publisher_id',
+                    'genres': 'genre_id',
+                    'categories': 'category_id',
+                    'tags': 'tag_id',
+                    'user_profiles': 'author_steamid',
+                    'game_review_summary': 'game_appid',
+                    'developer_stats': 'developer_id',
+                    'game_price_history': 'history_id'
+                }
                 
-                # Import association tables
-                for table in ['game_developers', 'game_publishers', 'game_genres', 
-                            'game_categories', 'game_tags']:
-                    importer.import_dataframe(
-                        self.normalized_data[table], 
-                        table_name=table,
-                        primary_key='game_appid'
-                    )
+                # Node label mapping (capitalize first letter)
+                label_mapping = {
+                    'developers': 'GameDeveloper',
+                    'publishers': 'GamePublisher',
+                    'genres': 'GameGenre',
+                    'categories': 'GameCategory',
+                    'tags': 'GameTag',
+                    'user_profiles': 'UserProfile',
+                    'game_review_summary': 'GameReviewSummary',
+                    'developer_stats': 'DeveloperStats',
+                    'game_price_history': 'GamePriceHistory'
+                }
+                
+                # Import dimension tables
+                # for table in ['developers', 'publishers', 'genres', 'categories', 'tags']:
+                #     importer.import_dataframe(
+                #         self.normalized_data[table],
+                #         node_label=label_mapping[table],
+                #         primary_key=pk_mapping[table],
+                #         indexes=['name']
+                #     )
                 
                 # Import aggregation tables
+                # Imported only 305000/784348 nodes - it was taking too long
+                # importer.import_dataframe(
+                #     self.normalized_data['user_profiles'],
+                #     node_label='UserProfile',
+                #     primary_key='author_steamid',
+                #     indexes=['num_games_owned', 'positive_review_count']
+                # )
+                
                 importer.import_dataframe(
-                    self.normalized_data['user_profiles'], 
-                    table_name='user_profiles',
-                    primary_key='author_steamid'
+                    self.normalized_data['game_review_summary'],
+                    node_label='GameReviewSummary',
+                    primary_key='game_appid',
+                    indexes=['total_reviews', 'positive_reviews']
                 )
+                
                 importer.import_dataframe(
-                    self.normalized_data['game_review_summary'], 
-                    table_name='game_review_summary',
-                    primary_key='app_id'
+                    self.normalized_data['developer_stats'],
+                    node_label='DeveloperStats',
+                    primary_key='developer_id',
+                    indexes=['total_games', 'avg_game_price']
                 )
-                importer.import_dataframe(
-                    self.normalized_data['developer_stats'], 
-                    table_name='developer_stats',
-                    primary_key='developer_id'
-                )
-                importer.import_dataframe(
-                    self.normalized_data['game_price_history'], 
-                    table_name='game_price_history',
-                    primary_key='game_appid'
-                )
-
-
+                
+                # Imported only 420000/980954 nodes - it was taking too long
+                # importer.import_dataframe(
+                #     self.normalized_data['game_price_history'],
+                #     node_label='GamePriceHistory',
+                #     primary_key='history_id',
+                #     indexes=['game_appid', 'recorded_date'],
+                #     batch_size=5000
+                # )
+                
+                # Create relationships for normalized tables
+                logger.info("\nCreating normalized table relationships...")
+                
+                with importer.driver.session() as session:
+                    # Link developers to games via game_developers
+                    if 'game_developers' in self.normalized_data:
+                        for _, row in self.normalized_data['game_developers'].iterrows():
+                            session.run("""
+                                MATCH (g:Game {appid: $game_appid})
+                                MATCH (d:GameDeveloper {developer_id: $developer_id})
+                                MERGE (g)-[:DEVELOPED_BY_NORM]->(d)
+                            """, game_appid=int(row['game_appid']), developer_id=int(row['developer_id']))
+                        logger.info("  Created DEVELOPED_BY_NORM relationships")
+                    
+                    # Link publishers to games
+                    if 'game_publishers' in self.normalized_data:
+                        for _, row in self.normalized_data['game_publishers'].iterrows():
+                            session.run("""
+                                MATCH (g:Game {appid: $game_appid})
+                                MATCH (p:GamePublisher {publisher_id: $publisher_id})
+                                MERGE (g)-[:PUBLISHED_BY_NORM]->(p)
+                            """, game_appid=int(row['game_appid']), publisher_id=int(row['publisher_id']))
+                        logger.info("  Created PUBLISHED_BY_NORM relationships")
+                    
+                    # Link genres to games
+                    if 'game_genres' in self.normalized_data:
+                        for _, row in self.normalized_data['game_genres'].iterrows():
+                            session.run("""
+                                MATCH (g:Game {appid: $game_appid})
+                                MATCH (ge:GameGenre {genre_id: $genre_id})
+                                MERGE (g)-[:HAS_GENRE_NORM]->(ge)
+                            """, game_appid=int(row['game_appid']), genre_id=int(row['genre_id']))
+                        logger.info("  Created HAS_GENRE_NORM relationships")
+                    
+                    # Link categories to games
+                    if 'game_categories' in self.normalized_data:
+                        for _, row in self.normalized_data['game_categories'].iterrows():
+                            session.run("""
+                                MATCH (g:Game {appid: $game_appid})
+                                MATCH (c:GameCategory {category_id: $category_id})
+                                MERGE (g)-[:HAS_CATEGORY_NORM]->(c)
+                            """, game_appid=int(row['game_appid']), category_id=int(row['category_id']))
+                        logger.info("  Created HAS_CATEGORY_NORM relationships")
+                    
+                    # Link tags to games with vote counts
+                    if 'game_tags' in self.normalized_data:
+                        # Process in batches for performance
+                        batch_size = 1000
+                        tags_data = self.normalized_data['game_tags']
+                        for i in range(0, len(tags_data), batch_size):
+                            batch = tags_data.iloc[i:i+batch_size]
+                            for _, row in batch.iterrows():
+                                session.run("""
+                                    MATCH (g:Game {appid: $game_appid})
+                                    MATCH (t:GameTagTag {tag_id: $tag_id})
+                                    MERGE (g)-[r:HAS_TAG_NORM]->(t)
+                                    SET r.vote_count = $vote_count
+                                """, game_appid=int(row['game_appid']), 
+                                    tag_id=int(row['tag_id']),
+                                    vote_count=int(row['vote_count']))
+                            if (i + batch_size) % 5000 == 0:
+                                logger.info(f"    Created {min(i + batch_size, len(tags_data))}/{len(tags_data)} tag relationships")
+                        logger.info("  Created HAS_TAG_NORM relationships")
+                    
+                    # Link game review summaries to games
+                    session.run("""
+                        MATCH (s:GameReviewSummary)
+                        MATCH (g:Game {appid: s.game_appid})
+                        MERGE (g)-[:HAS_REVIEW_SUMMARY]->(s)
+                    """)
+                    logger.info("  Created HAS_REVIEW_SUMMARY relationships")
+                    
+                    # Link developer stats to developers
+                    session.run("""
+                        MATCH (s:DeveloperStats)
+                        MATCH (d:Developer {developer_id: s.developer_id})
+                        MERGE (d)-[:HAS_STATS]->(s)
+                    """)
+                    logger.info("  Created HAS_STATS relationships")
+                    
+                    # Link price history to games
+                    session.run("""
+                        MATCH (h:GamePriceHistory)
+                        MATCH (g:Game {appid: h.game_appid})
+                        MERGE (g)-[:HAS_PRICE_HISTORY]->(h)
+                    """)
+                    logger.info("  Created HAS_PRICE_HISTORY relationships")
+            
             import_time = time.time()
             
-            # Create REVIEWED relationships
-            with importer.driver.session() as session:
-                session.run("""
-                    MATCH (r:Review)
-                    MATCH (g:Game {appid: r.app_id})
-                    MERGE (r)-[:REVIEWED]->(g)
-                """)
+            # # Create REVIEWED relationships
+            # with importer.driver.session() as session:
+            #     session.run("""
+            #         MATCH (r:Review)
+            #         MATCH (g:Game {appid: r.app_id})
+            #         MERGE (r)-[:REVIEWED]->(g)
+            #     """)
 
-
-            # Create HAS_PLAYTIME_DATA relationships
-            # Match by game name (case-insensitive)
-            result = session.run("""
-                MATCH (h:HLTB)
-                MATCH (g:Game)
-                WHERE toLower(h.game_game_name) = toLower(g.name)
-                MERGE (g)-[:HAS_PLAYTIME_DATA]->(h)
-                RETURN count(*) as linked
-            """)
-            linked_count = result.single()['linked']
-            logger.info(f"  Linked {linked_count} HLTB records to games")
-        
+                # # Create HAS_PLAYTIME_DATA relationships
+                # result = session.run("""
+                #     MATCH (h:HLTB)
+                #     MATCH (g:Game)
+                #     WHERE toLower(h.game_game_name) = toLower(g.name)
+                #     MERGE (g)-[:HAS_PLAYTIME_DATA]->(h)
+                #     RETURN count(*) as linked
+                # """)
+                # linked_count = result.single()['linked']
+                # logger.info(f"  Linked {linked_count} HLTB records to games")
+            
             relationships_time = time.time()
             
             
@@ -482,6 +657,14 @@ class DatabaseManager:
                 devs_count = session.run("MATCH (d:Developer) RETURN count(d) as count").single()['count']
                 genres_count = session.run("MATCH (g:Genre) RETURN count(g) as count").single()['count']
                 hltb_count = session.run("MATCH (h:HLTB) RETURN count(h) as count").single()['count']
+                
+                # Count normalized tables
+                norm_devs_count = 0
+                norm_pubs_count = 0
+                if self.normalized_data:
+                    norm_devs_count = session.run("MATCH (d:Developer) RETURN count(d) as count").single()['count']
+                    norm_pubs_count = session.run("MATCH (p:Publisher) RETURN count(p) as count").single()['count']
+            
             verify_time = time.time()
             
             self.results['neo4j'] = {
@@ -490,16 +673,20 @@ class DatabaseManager:
                 'developers': devs_count,
                 'genres': genres_count,
                 'hltbs': hltb_count,
-                'normalized_tables': len(self.normalized_data) if self.normalized_data else 0,
+                'normalized_devs': norm_devs_count,
+                'normalized_pubs': norm_pubs_count,
                 'status': 'success',
                 'import_time': import_time - start_time,
                 'verify_time': verify_time - import_time,
                 'drop_time': drop_time - start_time,
                 'relationships_time': relationships_time - import_time,
+                'normalized_time': normalized_time - import_time if self.normalized_data else 0,
             }
             
             logger.info(f" Neo4j import completed - Games: {games_count}, Reviews: {reviews_count}, HLTB: {hltb_count}")
             logger.info(f"  Additional nodes - Developers: {devs_count}, Genres: {genres_count}")
+            if self.normalized_data:
+                logger.info(f"  Normalized - Developers: {norm_devs_count}, Publishers: {norm_pubs_count}")
             return True
             
         except Exception as e:
@@ -514,7 +701,7 @@ class DatabaseManager:
             return False
         
         try:
-            logger.info("\n=== Importing to PostgreSQL ===")
+            logger.info("== Importing to PostgreSQL ===")
             start_time = time.time()
             importer = self.importers['postgresql']
             
@@ -545,6 +732,7 @@ class DatabaseManager:
 
             # Import normalized tables
             if self.normalized_data:
+                normalized_time = time.time()
                 logger.info("\nImporting normalized tables...")
                 
                 # Import dimension tables first
@@ -594,6 +782,7 @@ class DatabaseManager:
                 'import_time': import_time - start_time,
                 'verify_time': verify_time - import_time,
                 'drop_time': drop_time - start_time,
+                'normalized_time': normalized_time - import_time if self.normalized_data else 0,
             }
             
             logger.info(f" PostgreSQL import completed - Games: {len(games_df.df)}, Reviews: {len(reviews_df.df)}, HLTBs: {len(hltb_df.df)}")
@@ -611,7 +800,7 @@ class DatabaseManager:
             return False
         
         try:
-            logger.info("\n=== Importing to MySQL ===")
+            logger.info("== Importing to MySQL ===")
             start_time = time.time()
             importer = self.importers['mysql']
             
@@ -629,18 +818,20 @@ class DatabaseManager:
                 importer.verify_empty(tables_to_drop)
                 drop_time = time.time()
 
+            # Import main tables
             games_json_cols = ['supported_languages', 'full_audio_languages', 'packages', 
-                              'developers', 'publishers', 'categories', 'genres', 
-                              'screenshots', 'movies', 'tags']
+                            'developers', 'publishers', 'categories', 'genres', 
+                            'screenshots', 'movies', 'tags']
             importer.import_df(games_df, json_columns=games_json_cols)
             importer.import_df(reviews_df)
             importer.import_df(hltb_df)
 
-            # Import normalized tables
+            # Import normalized tables if available
             if self.normalized_data:
-                logger.info("\nImporting normalized tables...")
+                normalized_time = time.time()
+                logger.info("\nImporting normalized tables to MySQL...")
                 
-                # Import dimension tables first
+                # Import dimension tables
                 for table in ['developers', 'publishers', 'genres', 'categories', 'tags']:
                     importer.import_dataframe(
                         self.normalized_data[table], 
@@ -685,9 +876,12 @@ class DatabaseManager:
                 'import_time': import_time - start_time,
                 'verify_time': verify_time - import_time,
                 'drop_time': drop_time - start_time,
+                'normalized_time': normalized_time - import_time if self.normalized_data else 0,
             }
             
             logger.info(f" MySQL import completed - Games: {len(games_df.df)}, Reviews: {len(reviews_df.df)}, HLTBs: {len(hltb_df.df)}")
+            if self.normalized_data:
+                logger.info(f"  Normalized tables: {len(self.normalized_data)}")
             return True
             
         except Exception as e:

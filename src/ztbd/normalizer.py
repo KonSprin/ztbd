@@ -15,7 +15,7 @@ class DataNormalizer:
     
     @staticmethod
     def extract_developers(games_df):
-        """Extract unique developers from games dataframe"""
+        """Extract unique developers from games dataframe with IDs"""
         logger.info("Extracting developers...")
         developers = set()
         
@@ -26,15 +26,18 @@ class DataNormalizer:
                 elif isinstance(row['developers'], str):
                     developers.add(row['developers'])
         
+        # Sort to ensure deterministic ordering, then assign sequential IDs
+        sorted_developers = sorted(developers)
         df = pd.DataFrame([
-            {'name': dev} for dev in sorted(developers) if dev
+            {'developer_id': idx + 1, 'name': dev, 'game_count': 0} 
+            for idx, dev in enumerate(sorted_developers) if dev
         ])
         logger.info(f"Extracted {len(df)} unique developers")
         return df
     
     @staticmethod
     def extract_publishers(games_df):
-        """Extract unique publishers from games dataframe"""
+        """Extract unique publishers from games dataframe with IDs"""
         logger.info("Extracting publishers...")
         publishers = set()
         
@@ -45,15 +48,18 @@ class DataNormalizer:
                 elif isinstance(row['publishers'], str):
                     publishers.add(row['publishers'])
         
+        # Sort to ensure deterministic ordering, then assign sequential IDs
+        sorted_publishers = sorted(publishers)
         df = pd.DataFrame([
-            {'name': pub} for pub in sorted(publishers) if pub
+            {'publisher_id': idx + 1, 'name': pub, 'game_count': 0} 
+            for idx, pub in enumerate(sorted_publishers) if pub
         ])
         logger.info(f"Extracted {len(df)} unique publishers")
         return df
     
     @staticmethod
     def extract_genres(games_df):
-        """Extract unique genres from games dataframe"""
+        """Extract unique genres from games dataframe with IDs"""
         logger.info("Extracting genres...")
         genres = set()
         
@@ -64,15 +70,18 @@ class DataNormalizer:
                 elif isinstance(row['genres'], str):
                     genres.add(row['genres'])
         
+        # Sort to ensure deterministic ordering, then assign sequential IDs
+        sorted_genres = sorted(genres)
         df = pd.DataFrame([
-            {'name': genre} for genre in sorted(genres) if genre
+            {'genre_id': idx + 1, 'name': genre, 'description': None} 
+            for idx, genre in enumerate(sorted_genres) if genre
         ])
         logger.info(f"Extracted {len(df)} unique genres")
         return df
     
     @staticmethod
     def extract_categories(games_df):
-        """Extract unique categories from games dataframe"""
+        """Extract unique categories from games dataframe with IDs"""
         logger.info("Extracting categories...")
         categories = set()
         
@@ -83,15 +92,18 @@ class DataNormalizer:
                 elif isinstance(row['categories'], str):
                     categories.add(row['categories'])
         
+        # Sort to ensure deterministic ordering, then assign sequential IDs
+        sorted_categories = sorted(categories)
         df = pd.DataFrame([
-            {'name': cat} for cat in sorted(categories) if cat
+            {'category_id': idx + 1, 'name': cat, 'description': None} 
+            for idx, cat in enumerate(sorted_categories) if cat
         ])
         logger.info(f"Extracted {len(df)} unique categories")
         return df
     
     @staticmethod
     def extract_tags(games_df):
-        """Extract unique tags from games dataframe"""
+        """Extract unique tags from games dataframe with IDs"""
         logger.info("Extracting tags...")
         tags_dict = {}
         
@@ -104,19 +116,22 @@ class DataNormalizer:
                             tags_dict[tag] = 0
                         tags_dict[tag] += int(votes) if votes else 0
         
+        # Sort by tag name to ensure deterministic ordering, then assign sequential IDs
+        sorted_tags = sorted(tags_dict.items())
         df = pd.DataFrame([
-            {'name': tag, 'total_votes': votes} 
-            for tag, votes in sorted(tags_dict.items())
+            {'tag_id': idx + 1, 'name': tag, 'total_votes': votes} 
+            for idx, (tag, votes) in enumerate(sorted_tags)
         ])
         logger.info(f"Extracted {len(df)} unique tags")
         return df
     
     @staticmethod
     def create_game_developer_associations(games_df, developers_df):
-        """Create game-developer associations"""
+        """Create game-developer associations using explicit IDs"""
         logger.info("Creating game-developer associations...")
         
-        dev_lookup = {row['name']: idx + 1 for idx, row in developers_df.iterrows()}
+        # Create lookup dictionary from name to ID using the explicit developer_id column
+        dev_lookup = dict(zip(developers_df['name'], developers_df['developer_id']))
         associations = []
         
         for _, row in games_df.df.iterrows():
@@ -135,10 +150,11 @@ class DataNormalizer:
     
     @staticmethod
     def create_game_publisher_associations(games_df, publishers_df):
-        """Create game-publisher associations"""
+        """Create game-publisher associations using explicit IDs"""
         logger.info("Creating game-publisher associations...")
         
-        pub_lookup = {row['name']: idx + 1 for idx, row in publishers_df.iterrows()}
+        # Create lookup dictionary from name to ID using the explicit publisher_id column
+        pub_lookup = dict(zip(publishers_df['name'], publishers_df['publisher_id']))
         associations = []
         
         for _, row in games_df.df.iterrows():
@@ -157,10 +173,11 @@ class DataNormalizer:
     
     @staticmethod
     def create_game_genre_associations(games_df, genres_df):
-        """Create game-genre associations"""
+        """Create game-genre associations using explicit IDs"""
         logger.info("Creating game-genre associations...")
         
-        genre_lookup = {row['name']: idx + 1 for idx, row in genres_df.iterrows()}
+        # Create lookup dictionary from name to ID using the explicit genre_id column
+        genre_lookup = dict(zip(genres_df['name'], genres_df['genre_id']))
         associations = []
         
         for _, row in games_df.df.iterrows():
@@ -179,10 +196,11 @@ class DataNormalizer:
     
     @staticmethod
     def create_game_category_associations(games_df, categories_df):
-        """Create game-category associations"""
+        """Create game-category associations using explicit IDs"""
         logger.info("Creating game-category associations...")
         
-        cat_lookup = {row['name']: idx + 1 for idx, row in categories_df.iterrows()}
+        # Create lookup dictionary from name to ID using the explicit category_id column
+        cat_lookup = dict(zip(categories_df['name'], categories_df['category_id']))
         associations = []
         
         for _, row in games_df.df.iterrows():
@@ -201,10 +219,11 @@ class DataNormalizer:
     
     @staticmethod
     def create_game_tag_associations(games_df, tags_df):
-        """Create game-tag associations with vote counts"""
+        """Create game-tag associations with vote counts using explicit IDs"""
         logger.info("Creating game-tag associations...")
         
-        tag_lookup = {row['name']: idx + 1 for idx, row in tags_df.iterrows()}
+        # Create lookup dictionary from name to ID using the explicit tag_id column
+        tag_lookup = dict(zip(tags_df['name'], tags_df['tag_id']))
         associations = []
         
         for _, row in games_df.df.iterrows():
@@ -323,14 +342,16 @@ class DataNormalizer:
         logger.info(f"Simulating {months_back} months of price history...")
         
         price_history = []
-        base_date = datetime.now().date()
-        
+        base_date = datetime.now()
+        idx = 0
+
         for _, game in games_df.df.iterrows():
             if pd.notna(game['price']) and game['price'] > 0:
                 current_price = game['price']
                 discount = game['discount'] if pd.notna(game['discount']) else 0
                 
                 for month in range(months_back, -1, -1):
+                    # Use datetime instead of date for MongoDB compatibility
                     date = base_date - timedelta(days=month * 30)
                     
                     price_variation = random.uniform(0.9, 1.1)
@@ -341,11 +362,13 @@ class DataNormalizer:
                         historical_discount = random.choice([10, 15, 20, 25, 33, 50, 75])
                     
                     price_history.append({
+                        'history_id': idx,
                         'game_appid': game['appid'],
                         'price': round(historical_price, 2),
                         'discount_percent': historical_discount,
                         'recorded_date': date
                     })
+                    idx += 1
         
         df = pd.DataFrame(price_history)
         logger.info(f"Simulated {len(df)} price history records")

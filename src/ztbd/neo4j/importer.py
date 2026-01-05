@@ -318,7 +318,8 @@ class Neo4jImporter:
             if node_types is None:
                 # Check total node count
                 result = session.run("MATCH (n) RETURN count(n) as count")
-                total_count = result.single()['count']
+                total_count = result.single() or {'count': 0}
+                total_count = total_count['count']
                 
                 if total_count > 0:
                     logger.error(f"Database still has {total_count} nodes")
@@ -340,7 +341,8 @@ class Neo4jImporter:
                     query = f"MATCH (n:{node_type}) RETURN count(n) as count"
                     query = typing.cast(typing.LiteralString, query)
                     result = session.run(query)
-                    count = result.single()['count']
+                    count = result.single() or {'count': 0}
+                    count = count['count']
                     
                     if count > 0:
                         logger.error(f"{node_type} still has {count} nodes")

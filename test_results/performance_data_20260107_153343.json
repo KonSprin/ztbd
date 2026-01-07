@@ -1,0 +1,61 @@
+{
+  "labels": [
+    "simple_select_expensive_games",
+    "count_games_by_genre",
+    "games_with_developers",
+    "review_stats_by_game",
+    "developer_statistics",
+    "price_history_analysis",
+    "multi_join_game_details"
+  ],
+  "datasets": [
+    {
+      "label": "Postgresql",
+      "data": [
+        41.2,
+        22.82,
+        34.88,
+        185.3,
+        9.41,
+        69.45,
+        53.8
+      ]
+    },
+    {
+      "label": "Mysql",
+      "data": [
+        3959.0,
+        265.38,
+        3919.62,
+        3672.92,
+        92.98,
+        692.55,
+        4429.89
+      ]
+    },
+    {
+      "label": "Mongodb",
+      "data": [
+        41.34,
+        5864.4,
+        124.92,
+        276.87,
+        176.9,
+        472.1,
+        53.3
+      ]
+    },
+    {
+      "label": "Neo4j",
+      "data": [
+        29.36,
+        36.69,
+        11.72,
+        2.2,
+        437.08,
+        165.33,
+        8.61
+      ]
+    }
+  ]
+}

@@ -1,0 +1,435 @@
+{
+  "timestamp": "20260108_141922",
+  "databases_tested": [
+    "postgresql",
+    "mysql",
+    "mongodb",
+    "neo4j"
+  ],
+  "total_tests": 7,
+  "limit": 100000,
+  "repeats": 5,
+  "tests": [
+    {
+      "name": "simple_select_expensive_games",
+      "description": "Select all games with price greater than 50",
+      "results": {
+        "postgresql": {
+          "row_count": 580,
+          "execution_time_ms": 15.68,
+          "success": true,
+          "error": null
+        },
+        "mysql": {
+          "row_count": 580,
+          "execution_time_ms": 4313.75,
+          "success": true,
+          "error": null
+        },
+        "mongodb": {
+          "row_count": 580,
+          "execution_time_ms": 47.89,
+          "success": true,
+          "error": null
+        },
+        "neo4j": {
+          "row_count": 580,
+          "execution_time_ms": 10.56,
+          "success": true,
+          "error": null
+        }
+      },
+      "statistics": {
+        "postgresql": {
+          "mean_ms": 18.02,
+          "std_ms": 4.11,
+          "min_ms": 15.68,
+          "max_ms": 25.36,
+          "success_rate": 1.0
+        },
+        "mysql": {
+          "mean_ms": 4314.51,
+          "std_ms": 80.31,
+          "min_ms": 4207.47,
+          "max_ms": 4414.7,
+          "success_rate": 1.0
+        },
+        "mongodb": {
+          "mean_ms": 47.92,
+          "std_ms": 4.85,
+          "min_ms": 42.4,
+          "max_ms": 55.67,
+          "success_rate": 1.0
+        },
+        "neo4j": {
+          "mean_ms": 14.37,
+          "std_ms": 9.01,
+          "min_ms": 10.1,
+          "max_ms": 30.49,
+          "success_rate": 1.0
+        }
+      }
+    },
+    {
+      "name": "count_games_by_genre",
+      "description": "Count number of games for each genre",
+      "results": {
+        "postgresql": {
+          "row_count": 33,
+          "execution_time_ms": 22.76,
+          "success": true,
+          "error": null
+        },
+        "mysql": {
+          "row_count": 33,
+          "execution_time_ms": 172.34,
+          "success": true,
+          "error": null
+        },
+        "mongodb": {
+          "row_count": 33,
+          "execution_time_ms": 5867.47,
+          "success": true,
+          "error": null
+        },
+        "neo4j": {
+          "row_count": 33,
+          "execution_time_ms": 38.15,
+          "success": true,
+          "error": null
+        }
+      },
+      "statistics": {
+        "postgresql": {
+          "mean_ms": 21.8,
+          "std_ms": 0.65,
+          "min_ms": 20.95,
+          "max_ms": 22.76,
+          "success_rate": 1.0
+        },
+        "mysql": {
+          "mean_ms": 196.01,
+          "std_ms": 48.48,
+          "min_ms": 172.1,
+          "max_ms": 282.66,
+          "success_rate": 1.0
+        },
+        "mongodb": {
+          "mean_ms": 5890.32,
+          "std_ms": 20.92,
+          "min_ms": 5867.47,
+          "max_ms": 5913.39,
+          "success_rate": 1.0
+        },
+        "neo4j": {
+          "mean_ms": 47.65,
+          "std_ms": 11.84,
+          "min_ms": 38.15,
+          "max_ms": 67.69,
+          "success_rate": 1.0
+        }
+      }
+    },
+    {
+      "name": "games_with_developers",
+      "description": "Get games with their developer names",
+      "results": {
+        "postgresql": {
+          "row_count": 1951,
+          "execution_time_ms": 25.91,
+          "success": true,
+          "error": null
+        },
+        "mysql": {
+          "row_count": 1951,
+          "execution_time_ms": 4352.79,
+          "success": true,
+          "error": null
+        },
+        "mongodb": {
+          "row_count": 1951,
+          "execution_time_ms": 128.36,
+          "success": true,
+          "error": null
+        },
+        "neo4j": {
+          "row_count": 1951,
+          "execution_time_ms": 35.38,
+          "success": true,
+          "error": null
+        }
+      },
+      "statistics": {
+        "postgresql": {
+          "mean_ms": 30.46,
+          "std_ms": 10.05,
+          "min_ms": 25.68,
+          "max_ms": 48.43,
+          "success_rate": 1.0
+        },
+        "mysql": {
+          "mean_ms": 4390.34,
+          "std_ms": 207.61,
+          "min_ms": 4176.7,
+          "max_ms": 4728.34,
+          "success_rate": 1.0
+        },
+        "mongodb": {
+          "mean_ms": 130.05,
+          "std_ms": 1.56,
+          "min_ms": 128.36,
+          "max_ms": 132.27,
+          "success_rate": 1.0
+        },
+        "neo4j": {
+          "mean_ms": 39.51,
+          "std_ms": 8.91,
+          "min_ms": 35.38,
+          "max_ms": 55.45,
+          "success_rate": 1.0
+        }
+      }
+    },
+    {
+      "name": "review_stats_by_game",
+      "description": "Calculate review statistics per game",
+      "results": {
+        "postgresql": {
+          "row_count": 2,
+          "execution_time_ms": 69.11,
+          "success": true,
+          "error": null
+        },
+        "mysql": {
+          "row_count": 6,
+          "execution_time_ms": 3546.79,
+          "success": true,
+          "error": null
+        },
+        "mongodb": {
+          "row_count": 6,
+          "execution_time_ms": 282.99,
+          "success": true,
+          "error": null
+        },
+        "neo4j": {
+          "row_count": 0,
+          "execution_time_ms": 1.36,
+          "success": true,
+          "error": null
+        }
+      },
+      "statistics": {
+        "postgresql": {
+          "mean_ms": 70.94,
+          "std_ms": 1.61,
+          "min_ms": 69.11,
+          "max_ms": 72.98,
+          "success_rate": 1.0
+        },
+        "mysql": {
+          "mean_ms": 3710.65,
+          "std_ms": 116.97,
+          "min_ms": 3546.79,
+          "max_ms": 3857.36,
+          "success_rate": 1.0
+        },
+        "mongodb": {
+          "mean_ms": 284.02,
+          "std_ms": 3.74,
+          "min_ms": 280.45,
+          "max_ms": 289.82,
+          "success_rate": 1.0
+        },
+        "neo4j": {
+          "mean_ms": 7.17,
+          "std_ms": 12.8,
+          "min_ms": 1.31,
+          "max_ms": 30.06,
+          "success_rate": 1.0
+        }
+      }
+    },
+    {
+      "name": "developer_statistics",
+      "description": "Get statistics for developers with most games",
+      "results": {
+        "postgresql": {
+          "row_count": 6165,
+          "execution_time_ms": 26.16,
+          "success": true,
+          "error": null
+        },
+        "mysql": {
+          "row_count": 6165,
+          "execution_time_ms": 76.75,
+          "success": true,
+          "error": null
+        },
+        "mongodb": {
+          "row_count": 6165,
+          "execution_time_ms": 184.91,
+          "success": true,
+          "error": null
+        },
+        "neo4j": {
+          "row_count": 6165,
+          "execution_time_ms": 122.39,
+          "success": true,
+          "error": null
+        }
+      },
+      "statistics": {
+        "postgresql": {
+          "mean_ms": 26.1,
+          "std_ms": 0.49,
+          "min_ms": 25.55,
+          "max_ms": 26.85,
+          "success_rate": 1.0
+        },
+        "mysql": {
+          "mean_ms": 96.85,
+          "std_ms": 39.48,
+          "min_ms": 76.75,
+          "max_ms": 167.42,
+          "success_rate": 1.0
+        },
+        "mongodb": {
+          "mean_ms": 184.53,
+          "std_ms": 2.16,
+          "min_ms": 181.68,
+          "max_ms": 186.95,
+          "success_rate": 1.0
+        },
+        "neo4j": {
+          "mean_ms": 135.38,
+          "std_ms": 20.69,
+          "min_ms": 121.78,
+          "max_ms": 170.56,
+          "success_rate": 1.0
+        }
+      }
+    },
+    {
+      "name": "price_history_analysis",
+      "description": "Get price history for games with most price points",
+      "results": {
+        "postgresql": {
+          "row_count": 75458,
+          "execution_time_ms": 226.3,
+          "success": true,
+          "error": null
+        },
+        "mysql": {
+          "row_count": 75458,
+          "execution_time_ms": 665.67,
+          "success": true,
+          "error": null
+        },
+        "mongodb": {
+          "row_count": 75458,
+          "execution_time_ms": 538.45,
+          "success": true,
+          "error": null
+        },
+        "neo4j": {
+          "row_count": 32308,
+          "execution_time_ms": 623.89,
+          "success": true,
+          "error": null
+        }
+      },
+      "statistics": {
+        "postgresql": {
+          "mean_ms": 257.73,
+          "std_ms": 75.72,
+          "min_ms": 220.2,
+          "max_ms": 393.09,
+          "success_rate": 1.0
+        },
+        "mysql": {
+          "mean_ms": 812.94,
+          "std_ms": 196.02,
+          "min_ms": 665.67,
+          "max_ms": 1120.43,
+          "success_rate": 1.0
+        },
+        "mongodb": {
+          "mean_ms": 559.79,
+          "std_ms": 41.64,
+          "min_ms": 534.47,
+          "max_ms": 633.71,
+          "success_rate": 1.0
+        },
+        "neo4j": {
+          "mean_ms": 622.46,
+          "std_ms": 20.5,
+          "min_ms": 601.87,
+          "max_ms": 649.78,
+          "success_rate": 1.0
+        }
+      }
+    },
+    {
+      "name": "multi_join_game_details",
+      "description": "Get games with developers, genres, and categories in one query",
+      "results": {
+        "postgresql": {
+          "row_count": 55037,
+          "execution_time_ms": 190.9,
+          "success": true,
+          "error": null
+        },
+        "mysql": {
+          "row_count": 55037,
+          "execution_time_ms": 4849.21,
+          "success": true,
+          "error": null
+        },
+        "mongodb": {
+          "row_count": 674,
+          "execution_time_ms": 53.46,
+          "success": true,
+          "error": null
+        },
+        "neo4j": {
+          "row_count": 55005,
+          "execution_time_ms": 896.86,
+          "success": true,
+          "error": null
+        }
+      },
+      "statistics": {
+        "postgresql": {
+          "mean_ms": 234.21,
+          "std_ms": 91.28,
+          "min_ms": 190.9,
+          "max_ms": 397.46,
+          "success_rate": 1.0
+        },
+        "mysql": {
+          "mean_ms": 5004.97,
+          "std_ms": 170.1,
+          "min_ms": 4796.86,
+          "max_ms": 5175.4,
+          "success_rate": 1.0
+        },
+        "mongodb": {
+          "mean_ms": 53.6,
+          "std_ms": 1.21,
+          "min_ms": 52.61,
+          "max_ms": 55.64,
+          "success_rate": 1.0
+        },
+        "neo4j": {
+          "mean_ms": 1351.09,
+          "std_ms": 1025.47,
+          "min_ms": 880.94,
+          "max_ms": 3185.47,
+          "success_rate": 1.0
+        }
+      }
+    }
+  ],
+  "comparisons": []
+}

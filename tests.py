@@ -44,8 +44,14 @@ Examples:
   # Run tests only on PostgreSQL and MySQL
   python tests.py -d postgresql mysql
   
-  # Save results to custom directory
-  python tests.py -o my_test_results
+  # Test with larger result sets (LIMIT 500)
+  python tests.py --limit 500
+  
+  # Run each test 10 times for statistical analysis
+  python tests.py --repeats 10
+  
+  # Comprehensive performance test
+  python tests.py --limit 1000 --repeats 5 -o perf_results
   
   # Run with verbose logging
   python tests.py --verbose
@@ -67,6 +73,20 @@ Examples:
     )
     
     parser.add_argument(
+        '--limit', '-l',
+        type=int,
+        default=100,
+        help='Result set size limit for queries (default: 100)'
+    )
+    
+    parser.add_argument(
+        '--repeats', '-r',
+        type=int,
+        default=1,
+        help='Number of times to run each test (default: 1)'
+    )
+    
+    parser.add_argument(
         '--verbose', '-v',
         action='store_true',
         help='Enable verbose logging'
@@ -76,6 +96,12 @@ Examples:
         '--no-comparison',
         action='store_true',
         help='Skip result comparison step'
+    )
+    
+    parser.add_argument(
+        '--csv-only',
+        action='store_true',
+        help='Only generate CSV output (skip JSON/Markdown)'
     )
     
     args = parser.parse_args()
@@ -95,11 +121,26 @@ Examples:
     logger.info("CROSS-DATABASE QUERY TEST SUITE")
     logger.info("="*70)
     logger.info(f"Target databases: {', '.join(args.databases)}")
+    logger.info(f"Result limit: {args.limit}")
+    logger.info(f"Repeats per test: {args.repeats}")
     logger.info(f"Output directory: {args.output}")
     logger.info("="*70)
     
+    # Validate inputs
+    if args.limit < 1:
+        logger.error("Limit must be at least 1")
+        return 1
+    
+    if args.repeats < 1:
+        logger.error("Repeats must be at least 1")
+        return 1
+    
     # Create test runner
-    runner = TestRunner(databases=args.databases)
+    runner = TestRunner(
+        databases=args.databases,
+        limit=args.limit,
+        repeats=args.repeats
+    )
     
     try:
         # Setup connections
@@ -115,24 +156,33 @@ Examples:
         runner.run_all_tests()
         
         # Compare results
-        if not args.no_comparison:
+        if not args.no_comparison and args.repeats == 1:
             logger.info("[3/4] Comparing results...")
             runner.compare_results()
+        elif args.repeats > 1:
+            logger.info("[3/4] Skipping comparison (multiple runs)...")
         else:
             logger.info("[3/4] Skipping result comparison...")
         
         # Generate reports
         logger.info("[4/4] Generating reports...")
-        json_path, md_path = runner.generate_report(output_dir=args.output)
+        paths = runner.generate_report(
+            output_dir=args.output,
+            csv_only=args.csv_only
+        )
         
         # Print summary
         runner.print_summary()
         
-        logger.info("" + "="*70)
+        logger.info("="*70)
         logger.info("TEST EXECUTION COMPLETED")
         logger.info("="*70)
-        logger.info(f"JSON report: {json_path}")
-        logger.info(f"Markdown report: {md_path}")
+        logger.info(f"Raw data CSV: {paths.get('csv')}")
+        if args.repeats > 1:
+            logger.info(f"Statistics CSV: {paths.get('stats_csv')}")
+        if not args.csv_only:
+            logger.info(f"JSON report: {paths.get('json')}")
+            logger.info(f"Markdown report: {paths.get('md')}")
         logger.info("="*70)
         
         return 0

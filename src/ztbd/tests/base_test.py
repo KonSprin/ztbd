@@ -34,9 +34,10 @@ class BaseTest(ABC):
     Each test should inherit from this and implement the run_* methods
     """
     
-    def __init__(self, name: str, description: str):
+    def __init__(self, name: str, description: str, limit: int = 100):
         self.name = name
         self.description = description
+        self.limit = limit  # Result set size limit
         self.results: Dict[str, QueryResult] = {}
     
     @abstractmethod
@@ -140,6 +141,7 @@ class BaseTest(ABC):
         summary = {
             'test_name': self.name,
             'description': self.description,
+            'limit': self.limit,
             'results': {}
         }
         

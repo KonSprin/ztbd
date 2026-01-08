@@ -27,16 +27,16 @@ test_results/             # Generated test reports (created automatically)
 
 ```bash
 # Run all tests on all databases
-poetry run python run_tests.py
+poetry run python tests.py
 
 # Run tests on specific databases
-poetry run python run_tests.py -d postgresql mysql
+poetry run python tests.py -d postgresql mysql
 
 # Save results to custom directory
-poetry run python run_tests.py -o my_results
+poetry run python tests.py -o my_results
 
 # Enable verbose logging
-poetry run python run_tests.py --verbose
+poetry run python tests.py --verbose
 ```
 
 ### Command Line Options
@@ -203,11 +203,10 @@ ORDER BY appid, name
 ```
 
 ### 3. Limit Result Sets
-Use LIMIT to keep test execution fast:
+Set LIMIT to test dbs performance for different query sizes
 
-```python
-LIMIT 100  # Good for tests
-LIMIT 1000000  # Too slow
+```bash
+poetry run python tests.py --limit 1000 --repeats 10
 ```
 
 ### 4. Handle NULLs Consistently
@@ -244,7 +243,12 @@ Each test produces:
 - **Row count match**: Do all databases return the same number of rows?
 - **Data sample match**: Do the first 5 rows contain the same data?
 
-### Report Files
+### CSV Output for Analysis
+Results saved in formats optimized for R and Python:
+- `raw_results_*.csv` - Every test execution
+- `statistics_*.csv` - Aggregated statistics (when using --repeats)
+
+### 1. Report Files
 
 **JSON Report** (`test_results_{timestamp}.json`):
 ```json
@@ -271,6 +275,176 @@ Each test produces:
 - Human-readable summary
 - Tables showing performance comparison
 - Result validation status
+
+
+### 2. Raw Results CSV (`raw_results_TIMESTAMP.csv`)
+
+Contains every single test execution:
+
+```csv
+test_name,database,run_number,execution_time_ms,row_count,success,error,timestamp
+simple_select_expensive_games,postgresql,1,45.23,100,True,,2026-01-07T15:30:22
+simple_select_expensive_games,postgresql,2,43.87,100,True,,2026-01-07T15:30:23
+simple_select_expensive_games,postgresql,3,44.12,100,True,,2026-01-07T15:30:24
+simple_select_expensive_games,mysql,1,3856.12,100,True,,2026-01-07T15:30:25
+count_games_by_genre,postgresql,1,22.45,33,True,,2026-01-07T15:30:26
+```
+
+**Columns:**
+- `test_name` - Which test was run
+- `database` - Which database (postgresql, mysql, mongodb, neo4j)
+- `run_number` - Run number (1 to N)
+- `execution_time_ms` - Query execution time in milliseconds
+- `row_count` - Number of rows returned
+- `success` - True/False
+- `error` - Error message (if any)
+- `timestamp` - When the test ran
+
+### 3. Statistics CSV (`statistics_TIMESTAMP.csv`)
+
+Only generated when `--repeats > 1`. Contains aggregated statistics:
+
+```csv
+test_name,database,mean_ms,median_ms,std_ms,min_ms,max_ms,successes,failures,success_rate,avg_row_count
+simple_select_expensive_games,postgresql,44.41,44.12,0.68,43.87,45.23,3,0,1.0,100
+simple_select_expensive_games,mysql,3912.45,3856.12,125.34,3801.23,4087.89,3,0,1.0,100
+count_games_by_genre,postgresql,23.12,22.45,1.23,21.89,24.78,3,0,1.0,33
+```
+
+**Columns:**
+- `test_name` - Which test
+- `database` - Which database
+- `mean_ms` - Average execution time
+- `median_ms` - Median execution time
+- `std_ms` - Standard deviation (shows variance)
+- `min_ms` - Fastest execution
+- `max_ms` - Slowest execution
+- `successes` - How many runs succeeded
+- `failures` - How many runs failed
+- `success_rate` - Percentage successful (0-1)
+- `avg_row_count` - Average rows returned
+
+
+## Loading Data in R
+
+### Basic Analysis
+
+```r
+# Load raw results
+raw <- read.csv("test_results/raw_results_20260107_153343.csv")
+
+# Load statistics (if available)
+stats <- read.csv("test_results/statistics_20260107_153343.csv")
+
+# View summary
+summary(raw)
+head(stats)
+
+# Filter for specific test
+pg_results <- raw[raw$database == "postgresql",]
+
+# Plot execution times
+library(ggplot2)
+ggplot(raw, aes(x=database, y=execution_time_ms, fill=database)) +
+  geom_boxplot() +
+  facet_wrap(~test_name, scales="free_y") +
+  theme_minimal() +
+  labs(title="Database Performance Comparison",
+       y="Execution Time (ms)")
+```
+
+### Statistical Analysis
+
+```r
+# Compare databases for specific test
+test_data <- raw[raw$test_name == "simple_select_expensive_games",]
+
+# ANOVA test
+anova_result <- aov(execution_time_ms ~ database, data=test_data)
+summary(anova_result)
+
+# Post-hoc comparison
+TukeyHSD(anova_result)
+
+# Variance comparison
+library(dplyr)
+test_data %>%
+  group_by(database) %>%
+  summarise(
+    mean = mean(execution_time_ms),
+    sd = sd(execution_time_ms),
+    cv = sd / mean * 100  # Coefficient of variation
+  )
+```
+
+### Visualization
+
+```r
+# Performance over runs (to detect warmup effects)
+ggplot(raw, aes(x=run_number, y=execution_time_ms, color=database)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~test_name, scales="free_y") +
+  theme_minimal() +
+  labs(title="Performance Across Runs",
+       x="Run Number",
+       y="Execution Time (ms)")
+
+# Distribution comparison
+ggplot(raw, aes(x=execution_time_ms, fill=database)) +
+  geom_histogram(alpha=0.6, position="identity", bins=30) +
+  facet_wrap(~test_name, scales="free_x") +
+  theme_minimal()
+```
+
+## Loading Data in Python
+
+### Using Pandas
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load data
+raw = pd.read_csv("test_results/raw_results_20260107_153343.csv")
+stats = pd.read_csv("test_results/statistics_20260107_153343.csv")
+
+# Basic statistics
+print(raw.groupby(['test_name', 'database'])['execution_time_ms'].describe())
+
+# Filter for specific test
+pg_data = raw[raw['database'] == 'postgresql']
+
+# Plot comparison
+fig, ax = plt.subplots(figsize=(12, 6))
+raw.boxplot(column='execution_time_ms', by=['test_name', 'database'], ax=ax)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+plt.show()
+```
+
+### Advanced Analysis
+
+```python
+import numpy as np
+from scipy import stats as scipy_stats
+
+# Statistical comparison
+for test in raw['test_name'].unique():
+    test_data = raw[raw['test_name'] == test]
+    
+    pg = test_data[test_data['database'] == 'postgresql']['execution_time_ms']
+    mysql = test_data[test_data['database'] == 'mysql']['execution_time_ms']
+    
+    # T-test
+    t_stat, p_value = scipy_stats.ttest_ind(pg, mysql)
+    print(f"{test}: t={t_stat:.2f}, p={p_value:.4f}")
+    
+    # Effect size (Cohen's d)
+    cohens_d = (pg.mean() - mysql.mean()) / np.sqrt((pg.std()**2 + mysql.std()**2) / 2)
+    print(f"  Cohen's d: {cohens_d:.2f}")
+```
 
 ## Troubleshooting
 

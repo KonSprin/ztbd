@@ -11,20 +11,21 @@ logger = logging.getLogger('ztbd.tests')
 class SimpleSelectTest(BaseTest):
     """Test 1: Simple SELECT with WHERE clause - Games with price > 50"""
     
-    def __init__(self):
+    def __init__(self, limit=100):
         super().__init__(
             name="simple_select_expensive_games",
-            description="Select all games with price greater than 50"
+            description="Select all games with price greater than 50",
+            limit=limit,
         )
     
     def run_postgresql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT appid, name, price 
                 FROM games 
                 WHERE price > 50 
                 ORDER BY price DESC, appid
-                LIMIT 100
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0, 
@@ -32,12 +33,12 @@ class SimpleSelectTest(BaseTest):
     
     def run_mysql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT appid, name, price 
                 FROM games 
                 WHERE price > 50 
                 ORDER BY price DESC, appid
-                LIMIT 100
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -47,7 +48,7 @@ class SimpleSelectTest(BaseTest):
         cursor = db.games.find(
             {'price': {'$gt': 50}},
             {'appid': 1, 'name': 1, 'price': 1, '_id': 0}
-        ).sort([('price', -1), ('appid', 1)]).limit(100)
+        ).sort([('price', -1), ('appid', 1)]).limit(self.limit)
         
         rows = list(cursor)
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -55,12 +56,12 @@ class SimpleSelectTest(BaseTest):
     
     def run_neo4j(self, driver) -> QueryResult:
         with driver.session() as session:
-            result = session.run("""
+            result = session.run(f"""
                 MATCH (g:Game)
                 WHERE g.price > 50
                 RETURN g.appid as appid, g.name as name, g.price as price
                 ORDER BY g.price DESC, g.appid
-                LIMIT 100
+                LIMIT {self.limit}
             """)
             rows = [dict(record) for record in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -70,21 +71,22 @@ class SimpleSelectTest(BaseTest):
 class CountByGenreTest(BaseTest):
     """Test 2: Aggregation - Count games by genre"""
     
-    def __init__(self):
+    def __init__(self, limit=100):
         super().__init__(
             name="count_games_by_genre",
-            description="Count number of games for each genre"
+            description="Count number of games for each genre",
+            limit=limit
         )
     
     def run_postgresql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT g.name as genre, COUNT(*) as game_count
                 FROM game_genres gg
                 JOIN genres g ON gg.genre_id = g.genre_id
                 GROUP BY g.name
                 ORDER BY game_count DESC, g.name
-                LIMIT 50
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -92,13 +94,13 @@ class CountByGenreTest(BaseTest):
     
     def run_mysql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT g.name as genre, COUNT(*) as game_count
                 FROM game_genres gg
                 JOIN genres g ON gg.genre_id = g.genre_id
                 GROUP BY g.name
                 ORDER BY game_count DESC, g.name
-                LIMIT 50
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -123,7 +125,7 @@ class CountByGenreTest(BaseTest):
                 'game_count': 1
             }},
             {'$sort': {'game_count': -1, 'genre': 1}},
-            {'$limit': 50}
+            {'$limit': self.limit}
         ]
         rows = list(db.game_genres.aggregate(pipeline))
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -131,11 +133,11 @@ class CountByGenreTest(BaseTest):
     
     def run_neo4j(self, driver) -> QueryResult:
         with driver.session() as session:
-            result = session.run("""
+            result = session.run(f"""
                 MATCH (g:Game)-[:HAS_GENRE_NORM]->(ge:GameGenre)
                 RETURN ge.name as genre, COUNT(g) as game_count
                 ORDER BY game_count DESC, genre
-                LIMIT 50
+                LIMIT {self.limit}
             """)
             rows = [dict(record) for record in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -145,22 +147,23 @@ class CountByGenreTest(BaseTest):
 class GamesWithDevelopersTest(BaseTest):
     """Test 3: JOIN query - Games with their developers"""
     
-    def __init__(self):
+    def __init__(self, limit=100):
         super().__init__(
             name="games_with_developers",
-            description="Get games with their developer names"
+            description="Get games with their developer names",
+            limit=limit
         )
     
     def run_postgresql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT g.appid, g.name as game_name, d.name as developer
                 FROM games g
                 JOIN game_developers gd ON g.appid = gd.game_appid
                 JOIN developers d ON gd.developer_id = d.developer_id
                 WHERE g.price > 30
                 ORDER BY g.appid, d.name
-                LIMIT 100
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -168,14 +171,14 @@ class GamesWithDevelopersTest(BaseTest):
     
     def run_mysql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT g.appid, g.name as game_name, d.name as developer
                 FROM games g
                 JOIN game_developers gd ON g.appid = gd.game_appid
                 JOIN developers d ON gd.developer_id = d.developer_id
                 WHERE g.price > 30
                 ORDER BY g.appid, d.name
-                LIMIT 100
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -205,7 +208,7 @@ class GamesWithDevelopersTest(BaseTest):
                 'developer': '$dev_info.name'
             }},
             {'$sort': {'appid': 1, 'developer': 1}},
-            {'$limit': 100}
+            {'$limit': self.limit}
         ]
         rows = list(db.games.aggregate(pipeline))
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -213,12 +216,12 @@ class GamesWithDevelopersTest(BaseTest):
     
     def run_neo4j(self, driver) -> QueryResult:
         with driver.session() as session:
-            result = session.run("""
+            result = session.run(f"""
                 MATCH (g:Game)-[:DEVELOPED_BY_NORM]->(d:GameDeveloper)
                 WHERE g.price > 30
                 RETURN g.appid as appid, g.name as game_name, d.name as developer
                 ORDER BY g.appid, d.name
-                LIMIT 100
+                LIMIT {self.limit}
             """)
             rows = [dict(record) for record in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -228,46 +231,39 @@ class GamesWithDevelopersTest(BaseTest):
 class ReviewStatsByGameTest(BaseTest):
     """Test 4: Complex aggregation - Review statistics by game"""
     
-    def __init__(self):
+    def __init__(self, limit=100):
         super().__init__(
             name="review_stats_by_game",
-            description="Calculate review statistics per game"
+            description="Calculate review statistics per game",
+            limit=limit
         )
     
     def run_postgresql(self, engine) -> QueryResult:
+        # Use limit for both subquery and outer query
+        subquery_limit = min(20, self.limit)
+        
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT 
                     r.app_id,
                     COUNT(*) as total_reviews,
                     SUM(CASE WHEN r.recommended THEN 1 ELSE 0 END) as positive_reviews,
                     ROUND(AVG(r.votes_helpful), 2) as avg_helpful_votes
                 FROM reviews r
-                WHERE r.app_id IN (SELECT appid FROM games WHERE price > 0 LIMIT 20)
+                WHERE r.app_id IN (SELECT appid FROM games WHERE price > 0 LIMIT {subquery_limit})
                 GROUP BY r.app_id
                 ORDER BY total_reviews DESC
-                LIMIT 20
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
                          database='postgresql', test_name=self.name)
     
     def run_mysql(self, engine) -> QueryResult:
+        subquery_limit = min(20, self.limit)
+        
         with engine.connect() as conn:
-            # result = conn.execute(text("""
-            #     SELECT 
-            #         r.app_id,
-            #         COUNT(*) as total_reviews,
-            #         SUM(CASE WHEN r.recommended THEN 1 ELSE 0 END) as positive_reviews,
-            #         ROUND(AVG(r.votes_helpful), 2) as avg_helpful_votes
-            #     FROM reviews r
-            #     WHERE r.app_id IN (SELECT appid FROM games WHERE price > 0 LIMIT 20)
-            #     GROUP BY r.app_id
-            #     ORDER BY total_reviews DESC
-            #     LIMIT 20
-            # """)) # This version of MySQL doesn't yet support 'LIMIT & IN/ALL/ANY/SOME subquery'
-
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT
                     r.app_id,
                     COUNT(*) as total_reviews,
@@ -278,22 +274,22 @@ class ReviewStatsByGameTest(BaseTest):
                     SELECT appid
                     FROM games
                     WHERE price > 0
-                    LIMIT 20
+                    LIMIT {subquery_limit}
                 ) AS limited_games ON r.app_id = limited_games.appid
                 GROUP BY r.app_id
                 ORDER BY total_reviews DESC
-                LIMIT 20;
+                LIMIT {self.limit};
             """))
-
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
                          database='mysql', test_name=self.name)
     
     def run_mongodb(self, db) -> QueryResult:
-        # First get game IDs
+        subquery_limit = min(20, self.limit)
+        
         game_ids = [g['appid'] for g in db.games.find(
             {'price': {'$gt': 0}}, {'appid': 1, '_id': 0}
-        ).limit(20)]
+        ).limit(subquery_limit)]
         
         pipeline = [
             {'$match': {'app_id': {'$in': game_ids}}},
@@ -313,28 +309,30 @@ class ReviewStatsByGameTest(BaseTest):
                 'avg_helpful_votes': {'$round': ['$avg_helpful_votes', 2]}
             }},
             {'$sort': {'total_reviews': -1}},
-            {'$limit': 20}
+            {'$limit': self.limit}
         ]
         rows = list(db.reviews.aggregate(pipeline))
         return QueryResult(rows=rows, row_count=0, execution_time=0,
                          database='mongodb', test_name=self.name)
     
     def run_neo4j(self, driver) -> QueryResult:
+        subquery_limit = min(20, self.limit)
+        
         with driver.session() as session:
-            result = session.run("""
+            result = session.run(f"""
                 MATCH (g:Game)
                 WHERE g.price > 0
                 WITH g.appid as game_appid
-                LIMIT 20
+                LIMIT {subquery_limit}
                 
-                MATCH (r:Review {app_id: game_appid})
+                MATCH (r:Review {{app_id: game_appid}})
                 WITH game_appid as app_id,
                      COUNT(r) as total_reviews,
                      SUM(CASE WHEN r.recommended THEN 1 ELSE 0 END) as positive_reviews,
                      ROUND(AVG(r.votes_helpful), 2) as avg_helpful_votes
                 ORDER BY total_reviews DESC
                 RETURN app_id, total_reviews, positive_reviews, avg_helpful_votes
-                LIMIT 20
+                LIMIT {self.limit}
             """)
             rows = [dict(record) for record in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -344,15 +342,16 @@ class ReviewStatsByGameTest(BaseTest):
 class DeveloperStatsTest(BaseTest):
     """Test 5: Complex JOIN with aggregation - Developer statistics"""
     
-    def __init__(self):
+    def __init__(self, limit=100):
         super().__init__(
             name="developer_statistics",
-            description="Get statistics for developers with most games"
+            description="Get statistics for developers with most games",
+            limit=limit
         )
     
     def run_postgresql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT 
                     ds.developer_id,
                     d.name as developer_name,
@@ -364,7 +363,7 @@ class DeveloperStatsTest(BaseTest):
                 JOIN developers d ON ds.developer_id = d.developer_id
                 WHERE ds.total_games >= 3
                 ORDER BY ds.total_games DESC, d.name
-                LIMIT 30
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -372,7 +371,7 @@ class DeveloperStatsTest(BaseTest):
     
     def run_mysql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT 
                     ds.developer_id,
                     d.name as developer_name,
@@ -384,7 +383,7 @@ class DeveloperStatsTest(BaseTest):
                 JOIN developers d ON ds.developer_id = d.developer_id
                 WHERE ds.total_games >= 3
                 ORDER BY ds.total_games DESC, d.name
-                LIMIT 30
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -410,7 +409,7 @@ class DeveloperStatsTest(BaseTest):
                 'total_negative_reviews': 1
             }},
             {'$sort': {'total_games': -1, 'developer_name': 1}},
-            {'$limit': 30}
+            {'$limit': self.limit}
         ]
         rows = list(db.developer_stats.aggregate(pipeline))
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -418,10 +417,10 @@ class DeveloperStatsTest(BaseTest):
     
     def run_neo4j(self, driver) -> QueryResult:
         with driver.session() as session:
-            result = session.run("""
+            result = session.run(f"""
                 MATCH (ds:DeveloperStats)
                 WHERE ds.total_games >= 3
-                MATCH (d:GameDeveloper {developer_id: ds.developer_id})
+                MATCH (d:GameDeveloper {{developer_id: ds.developer_id}})
                 RETURN ds.developer_id as developer_id,
                        d.name as developer_name,
                        ds.total_games as total_games,
@@ -429,7 +428,7 @@ class DeveloperStatsTest(BaseTest):
                        ds.total_positive_reviews as total_positive_reviews,
                        ds.total_negative_reviews as total_negative_reviews
                 ORDER BY ds.total_games DESC, d.name
-                LIMIT 30
+                LIMIT {self.limit}
             """)
             rows = [dict(record) for record in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -439,15 +438,16 @@ class DeveloperStatsTest(BaseTest):
 class PriceHistoryTest(BaseTest):
     """Test 6: Time series - Price history for specific games"""
     
-    def __init__(self):
+    def __init__(self, limit=100):
         super().__init__(
             name="price_history_analysis",
-            description="Get price history for games with most price points"
+            description="Get price history for games with most price points",
+            limit=limit
         )
     
     def run_postgresql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT 
                     ph.game_appid,
                     COUNT(*) as price_points,
@@ -457,7 +457,7 @@ class PriceHistoryTest(BaseTest):
                 FROM game_price_history ph
                 GROUP BY ph.game_appid
                 ORDER BY price_points DESC
-                LIMIT 50
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -465,7 +465,7 @@ class PriceHistoryTest(BaseTest):
     
     def run_mysql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT 
                     ph.game_appid,
                     COUNT(*) as price_points,
@@ -475,7 +475,7 @@ class PriceHistoryTest(BaseTest):
                 FROM game_price_history ph
                 GROUP BY ph.game_appid
                 ORDER BY price_points DESC
-                LIMIT 50
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -499,7 +499,7 @@ class PriceHistoryTest(BaseTest):
                 'avg_price': 1
             }},
             {'$sort': {'price_points': -1}},
-            {'$limit': 50}
+            {'$limit': self.limit}
         ]
         rows = list(db.game_price_history.aggregate(pipeline))
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -507,7 +507,7 @@ class PriceHistoryTest(BaseTest):
     
     def run_neo4j(self, driver) -> QueryResult:
         with driver.session() as session:
-            result = session.run("""
+            result = session.run(f"""
                 MATCH (ph:GamePriceHistory)
                 WITH ph.game_appid as game_appid,
                      COUNT(ph) as price_points,
@@ -516,7 +516,7 @@ class PriceHistoryTest(BaseTest):
                      AVG(ph.price) as avg_price
                 ORDER BY price_points DESC
                 RETURN game_appid, price_points, min_price, max_price, avg_price
-                LIMIT 50
+                LIMIT {self.limit}
             """)
             rows = [dict(record) for record in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -526,15 +526,16 @@ class PriceHistoryTest(BaseTest):
 class MultiJoinTest(BaseTest):
     """Test 7: Complex multi-table JOIN - Games with developers, genres, and categories"""
     
-    def __init__(self):
+    def __init__(self, limit=100):
         super().__init__(
             name="multi_join_game_details",
-            description="Get games with developers, genres, and categories in one query"
+            description="Get games with developers, genres, and categories in one query",
+            limit=limit
         )
     
     def run_postgresql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT 
                     g.appid,
                     g.name as game_name,
@@ -550,7 +551,7 @@ class MultiJoinTest(BaseTest):
                 LEFT JOIN categories c ON gc.category_id = c.category_id
                 WHERE g.price BETWEEN 20 AND 40
                 ORDER BY g.appid, d.name, ge.name, c.name
-                LIMIT 100
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -558,7 +559,7 @@ class MultiJoinTest(BaseTest):
     
     def run_mysql(self, engine) -> QueryResult:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(text(f"""
                 SELECT 
                     g.appid,
                     g.name as game_name,
@@ -574,16 +575,19 @@ class MultiJoinTest(BaseTest):
                 LEFT JOIN categories c ON gc.category_id = c.category_id
                 WHERE g.price BETWEEN 20 AND 40
                 ORDER BY g.appid, d.name, ge.name, c.name
-                LIMIT 100
+                LIMIT {self.limit}
             """))
             rows = [dict(row._mapping) for row in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,
                          database='mysql', test_name=self.name)
     
     def run_mongodb(self, db) -> QueryResult:
+        # For MongoDB, limit games first to reduce complexity
+        games_limit = min(20, self.limit // 5)
+        
         pipeline = [
             {'$match': {'price': {'$gte': 20, '$lte': 40}}},
-            {'$limit': 20},  # Limit games first to reduce join complexity
+            {'$limit': games_limit},
             {'$lookup': {
                 'from': 'game_developers',
                 'localField': 'appid',
@@ -632,7 +636,7 @@ class MultiJoinTest(BaseTest):
                 'category': {'$arrayElemAt': ['$category_info.name', 0]}
             }},
             {'$sort': {'appid': 1, 'developer': 1, 'genre': 1, 'category': 1}},
-            {'$limit': 100}
+            {'$limit': self.limit}
         ]
         rows = list(db.games.aggregate(pipeline))
         return QueryResult(rows=rows, row_count=0, execution_time=0,
@@ -640,7 +644,7 @@ class MultiJoinTest(BaseTest):
     
     def run_neo4j(self, driver) -> QueryResult:
         with driver.session() as session:
-            result = session.run("""
+            result = session.run(f"""
                 MATCH (g:Game)
                 WHERE g.price >= 20 AND g.price <= 40
                 OPTIONAL MATCH (g)-[:DEVELOPED_BY_NORM]->(d:GameDeveloper)
@@ -652,7 +656,7 @@ class MultiJoinTest(BaseTest):
                        ge.name as genre,
                        c.name as category
                 ORDER BY g.appid, d.name, ge.name, c.name
-                LIMIT 100
+                LIMIT {self.limit}
             """)
             rows = [dict(record) for record in result]
         return QueryResult(rows=rows, row_count=0, execution_time=0,

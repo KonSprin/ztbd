@@ -9,7 +9,7 @@ logs/
 cache/
 *.pkl
 *.csv
-!test_results/*.csv
+!test_results/*/*.csv
 
 old-*
 old/

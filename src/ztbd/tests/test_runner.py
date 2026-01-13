@@ -227,6 +227,12 @@ class TestRunner:
             
             if len(successful_dbs) < 2:
                 logger.warning(f"  Not enough successful results to compare ({len(successful_dbs)}/4)")
+                self.comparison_results.append({
+                    'test_name': test.name,
+                    'successful_databases': successful_dbs,
+                    'comparison_possible': False,
+                    'reason': 'Insufficient successful results'
+                })
                 continue
             
             # Compare row counts
@@ -234,41 +240,119 @@ class TestRunner:
             unique_counts = set(row_counts.values())
             
             if len(unique_counts) == 1:
-                logger.info(f"  Row counts match: {list(unique_counts)[0]} rows")
+                logger.info(f"  ✓ Row counts match: {list(unique_counts)[0]} rows")
                 count_match = True
             else:
-                logger.warning(f"  Row count mismatch: {row_counts}")
+                logger.warning(f"  ✗ Row count mismatch: {row_counts}")
                 count_match = False
             
-            # Compare actual data (sample check on first few rows)
-            data_match = self._compare_data_samples(results, successful_dbs)
+            # Compare actual data
+            data_comparison = self._compare_data_samples(results, successful_dbs)
             
             self.comparison_results.append({
                 'test_name': test.name,
                 'successful_databases': successful_dbs,
+                'comparison_possible': True,
                 'row_count_match': count_match,
                 'row_counts': row_counts,
-                'data_sample_match': data_match
+                'data_comparison': data_comparison
             })
     
     def _compare_data_samples(self, results: Dict[str, QueryResult], 
-                             dbs: List[str]) -> bool:
-        """Compare first few rows of data across databases"""
+                             dbs: List[str]) -> Dict[str, Any]:
+        """Compare data across databases"""
         if len(dbs) < 2:
-            return True
+            return {'match': True, 'details': 'Only one database to compare'}
         
+        # Get reference database (first successful one)
         ref_db = dbs[0]
-        ref_rows = results[ref_db].rows[:5]
+        ref_rows = results[ref_db].rows
+        
+        comparison_details = {
+            'match': True,
+            'row_count_matches': True,
+            'data_matches': True,
+            'field_name_matches': True,
+            'issues': []
+        }
         
         for db in dbs[1:]:
-            test_rows = results[db].rows[:5]
+            test_rows = results[db].rows
             
+            # Compare row counts
             if len(ref_rows) != len(test_rows):
-                logger.warning(f"    Sample size mismatch: {ref_db}={len(ref_rows)} vs {db}={len(test_rows)}")
-                return False
+                comparison_details['match'] = False
+                comparison_details['row_count_matches'] = False
+                comparison_details['issues'].append(
+                    f"Row count mismatch: {ref_db}={len(ref_rows)} vs {db}={len(test_rows)}"
+                )
+                continue
+            
+            # Compare field names (first row)
+            if ref_rows and test_rows:
+                ref_fields = set(ref_rows[0].keys())
+                test_fields = set(test_rows[0].keys())
+                
+                if ref_fields != test_fields:
+                    comparison_details['match'] = False
+                    comparison_details['field_name_matches'] = False
+                    missing_in_ref = test_fields - ref_fields
+                    missing_in_test = ref_fields - test_fields
+                    
+                    if missing_in_ref:
+                        comparison_details['issues'].append(
+                            f"Fields in {db} but not {ref_db}: {missing_in_ref}"
+                        )
+                    if missing_in_test:
+                        comparison_details['issues'].append(
+                            f"Fields in {ref_db} but not {db}: {missing_in_test}"
+                        )
+            
+            # Compare actual data (row by row)
+            data_mismatches = []
+            sample_size = min(10, len(ref_rows))  # Compare first 10 rows
+            
+            for i in range(sample_size):
+                ref_row = ref_rows[i]
+                test_row = test_rows[i]
+                
+                # Compare common fields
+                common_fields = set(ref_row.keys()) & set(test_row.keys())
+                
+                for field in common_fields:
+                    ref_val = ref_row[field]
+                    test_val = test_row[field]
+                    
+                    # Handle numeric comparisons with tolerance
+                    if isinstance(ref_val, (int, float)) and isinstance(test_val, (int, float)):
+                        if abs(ref_val - test_val) > 0.01:  # 0.01 tolerance
+                            data_mismatches.append(
+                                f"Row {i}, field '{field}': {ref_db}={ref_val} vs {db}={test_val}"
+                            )
+                    elif ref_val != test_val:
+                        data_mismatches.append(
+                            f"Row {i}, field '{field}': {ref_db}={ref_val} vs {db}={test_val}"
+                        )
+            
+            if data_mismatches:
+                comparison_details['match'] = False
+                comparison_details['data_matches'] = False
+                comparison_details['issues'].extend(data_mismatches[:5])  # Show first 5 mismatches
+                
+                if len(data_mismatches) > 5:
+                    comparison_details['issues'].append(
+                        f"... and {len(data_mismatches) - 5} more data mismatches"
+                    )
         
-        logger.info("    Data samples match across databases")
-        return True
+        # Log results
+        if comparison_details['match']:
+            logger.info("    ✓ Data matches across all databases")
+        else:
+            logger.warning("    ✗ Data inconsistencies found:")
+            for issue in comparison_details['issues']:
+                logger.warning(f"      - {issue}")
+        
+        return comparison_details
     
     def generate_report(self, output_dir: str = "test_results", 
                        csv_only: bool = False) -> Dict[str, Path]:
@@ -457,11 +541,37 @@ class TestRunner:
             
             for comp in report_data['comparisons']:
                 md += f"### {comp['test_name']}\n\n"
-                md += f"- **Row Count Match:** {'✓ Yes' if comp['row_count_match'] else '✗ No'}\n"
-                md += f"- **Data Sample Match:** {'✓ Yes' if comp['data_sample_match'] else '✗ No'}\n"
                 
-                if not comp['row_count_match']:
-                    md += f"- **Row Counts:** {comp['row_counts']}\n"
+                if not comp.get('comparison_possible', True):
+                    md += f"- **Comparison Status:** ❌ Not possible - {comp.get('reason', 'Unknown reason')}\n\n"
+                    continue
+                
+                # Overall match status
+                data_comp = comp.get('data_comparison', {})
+                overall_match = comp.get('row_count_match', False) and data_comp.get('match', False)
+                match_icon = "✅" if overall_match else "❌"
+                
+                md += f"- **Overall Match:** {match_icon} {'Yes' if overall_match else 'No'}\n"
+                md += f"- **Successful Databases:** {', '.join(comp.get('successful_databases', []))}\n"
+                md += f"- **Row Count Match:** {'✓ Yes' if comp.get('row_count_match', False) else '✗ No'}\n"
+                
+                if not comp.get('row_count_match', False):
+                    md += f"  - Row counts: {comp.get('row_counts', {})}\n"
+                
+                # Detailed data comparison results
+                if data_comp:
+                    md += f"- **Data Comparison:**\n"
+                    md += f"  - Field Names Match: {'✓ Yes' if data_comp.get('field_name_matches', False) else '✗ No'}\n"
+                    md += f"  - Data Values Match: {'✓ Yes' if data_comp.get('data_matches', False) else '✗ No'}\n"
+                    
+                    # Show issues if any
+                    issues = data_comp.get('issues', [])
+                    if issues:
+                        md += f"  - **Issues Found:**\n"
+                        for issue in issues[:10]:  # Limit to first 10 issues
+                            md += f"    - {issue}\n"
+                        if len(issues) > 10:
+                            md += f"    - ... and {len(issues) - 10} more issues\n"
                 
                 md += "\n"
         
@@ -507,10 +617,27 @@ class TestRunner:
             print("="*60 + "\n")
             
             for comp in self.comparison_results:
-                match_status = "✓" if comp['row_count_match'] and comp['data_sample_match'] else "✗"
+                if not comp.get('comparison_possible', True):
+                    print(f"⚠ {comp['test_name']} - {comp.get('reason', 'Comparison not possible')}")
+                    continue
+                
+                data_comp = comp.get('data_comparison', {})
+                overall_match = comp.get('row_count_match', False) and data_comp.get('match', False)
+                match_status = "✓" if overall_match else "✗"
+                
                 print(f"{match_status} {comp['test_name']}")
-                if not comp['row_count_match']:
-                    print(f"  Row counts: {comp['row_counts']}")
+                
+                if not comp.get('row_count_match', False):
+                    print(f"  Row counts: {comp.get('row_counts', {})}")
+                
+                # Show data comparison issues
+                issues = data_comp.get('issues', [])
+                if issues:
+                    print(f"  Data issues: {len(issues)} found")
+                    for issue in issues[:3]:  # Show first 3 issues
+                        print(f"    - {issue}")
+                    if len(issues) > 3:
+                        print(f"    - ... and {len(issues) - 3} more")
 
 
 def main():

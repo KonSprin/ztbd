@@ -541,11 +541,37 @@ class TestRunner:
             
             for comp in report_data['comparisons']:
                 md += f"### {comp['test_name']}\n\n"
-                md += f"- **Row Count Match:** {'✓ Yes' if comp['row_count_match'] else '✗ No'}\n"
-                md += f"- **Data Sample Match:** {'✓ Yes' if comp['data_sample_match'] else '✗ No'}\n"
                 
-                if not comp['row_count_match']:
-                    md += f"- **Row Counts:** {comp['row_counts']}\n"
+                if not comp.get('comparison_possible', True):
+                    md += f"- **Comparison Status:** ❌ Not possible - {comp.get('reason', 'Unknown reason')}\n\n"
+                    continue
+                
+                # Overall match status
+                data_comp = comp.get('data_comparison', {})
+                overall_match = comp.get('row_count_match', False) and data_comp.get('match', False)
+                match_icon = "✅" if overall_match else "❌"
+                
+                md += f"- **Overall Match:** {match_icon} {'Yes' if overall_match else 'No'}\n"
+                md += f"- **Successful Databases:** {', '.join(comp.get('successful_databases', []))}\n"
+                md += f"- **Row Count Match:** {'✓ Yes' if comp.get('row_count_match', False) else '✗ No'}\n"
+                
+                if not comp.get('row_count_match', False):
+                    md += f"  - Row counts: {comp.get('row_counts', {})}\n"
+                
+                # Detailed data comparison results
+                if data_comp:
+                    md += f"- **Data Comparison:**\n"
+                    md += f"  - Field Names Match: {'✓ Yes' if data_comp.get('field_name_matches', False) else '✗ No'}\n"
+                    md += f"  - Data Values Match: {'✓ Yes' if data_comp.get('data_matches', False) else '✗ No'}\n"
+                    
+                    # Show issues if any
+                    issues = data_comp.get('issues', [])
+                    if issues:
+                        md += f"  - **Issues Found:**\n"
+                        for issue in issues[:10]:  # Limit to first 10 issues
+                            md += f"    - {issue}\n"
+                        if len(issues) > 10:
+                            md += f"    - ... and {len(issues) - 10} more issues\n"
                 
                 md += "\n"
         
@@ -591,10 +617,27 @@ class TestRunner:
             print("="*60 + "\n")
             
             for comp in self.comparison_results:
-                match_status = "✓" if comp['row_count_match'] and comp['data_sample_match'] else "✗"
+                if not comp.get('comparison_possible', True):
+                    print(f"⚠ {comp['test_name']} - {comp.get('reason', 'Comparison not possible')}")
+                    continue
+                
+                data_comp = comp.get('data_comparison', {})
+                overall_match = comp.get('row_count_match', False) and data_comp.get('match', False)
+                match_status = "✓" if overall_match else "✗"
+                
                 print(f"{match_status} {comp['test_name']}")
-                if not comp['row_count_match']:
-                    print(f"  Row counts: {comp['row_counts']}")
+                
+                if not comp.get('row_count_match', False):
+                    print(f"  Row counts: {comp.get('row_counts', {})}")
+                
+                # Show data comparison issues
+                issues = data_comp.get('issues', [])
+                if issues:
+                    print(f"  Data issues: {len(issues)} found")
+                    for issue in issues[:3]:  # Show first 3 issues
+                        print(f"    - {issue}")
+                    if len(issues) > 3:
+                        print(f"    - ... and {len(issues) - 3} more")
 
 
 def main():

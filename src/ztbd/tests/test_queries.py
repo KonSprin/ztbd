@@ -462,7 +462,7 @@ class PriceHistoryTest(BaseTest):
                     COUNT(*) as price_points,
                     ROUND(CAST(MIN(ph.price) as numeric), 2) as min_price,
                     ROUND(CAST(MAX(ph.price) as numeric), 2) as max_price,
-                    ROUND(CAST(AVGIN(ph.price) as numeric), 2) as avg_price
+                    ROUND(CAST(AVG(ph.price) as numeric), 2) as avg_price
                 FROM game_price_history ph
                 GROUP BY ph.game_appid
                 ORDER BY price_points DESC, ph.game_appid ASC
@@ -603,7 +603,7 @@ class MultiJoinTest(BaseTest):
         pipeline = [
             {'$match': {'price': {'$gte': 20, '$lte': 40}}},
             {'$sort': {'appid': 1}},  # Ensure consistent game ordering
-            {'$limit': games_limit},
+            # {'$limit': games_limit},
             {'$lookup': {
                 'from': 'game_developers',
                 'localField': 'appid',

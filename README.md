@@ -798,6 +798,15 @@ After full import, you'll have approximately:
 
 **Total Records:** ~5 million across all tables
 
+Due to the very long import times, some tables were not fully loaded into neo4j db, except for reviews which got more data instead. Neo4j counts that are different: 
+
+| Table                  | Rows        | Description                    |
+|------------------------|-------------|--------------------------------|
+| reviews                | 1,851,779 | User reviews    |
+| user_profiles          | 305,000 | Unique reviewer profiles       |
+| game_price_history     | 420,000  | Historical price data (12mo)   |
+
+
 ---
 
 ## 🚧 Troubleshooting

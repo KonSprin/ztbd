@@ -460,9 +460,9 @@ class PriceHistoryTest(BaseTest):
                 SELECT 
                     ph.game_appid,
                     COUNT(*) as price_points,
-                    ROUND(MIN(ph.price), 2) as min_price,
-                    ROUND(MAX(ph.price), 2) as max_price,
-                    ROUND(AVG(ph.price), 2) as avg_price
+                    ROUND(CAST(MIN(ph.price) as numeric), 2) as min_price,
+                    ROUND(CAST(MAX(ph.price) as numeric), 2) as max_price,
+                    ROUND(CAST(AVGIN(ph.price) as numeric), 2) as avg_price
                 FROM game_price_history ph
                 GROUP BY ph.game_appid
                 ORDER BY price_points DESC, ph.game_appid ASC

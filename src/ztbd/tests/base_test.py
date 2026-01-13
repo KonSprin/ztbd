@@ -30,6 +30,37 @@ class QueryResult:
         # Normalize all rows for consistency
         self.rows = [self._normalize_row(row) for row in self.rows]
 
+    def _normalize_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize a single row for cross-database consistency"""
+        normalized = {}
+        for key, value in row.items():
+            # Normalize field names to lowercase
+            norm_key = key.lower()
+            
+            # Handle None values
+            if value is None:
+                normalized[norm_key] = None
+            # Convert all numeric types to consistent format
+            elif isinstance(value, (int, float, Decimal)):
+                # Keep integers as integers, floats with precision
+                if isinstance(value, int) or (isinstance(value, (float, Decimal)) and float(value).is_integer()):
+                    normalized[norm_key] = int(float(value))
+                else:
+                    normalized[norm_key] = round(float(value), 2)
+            # Convert datetime objects to ISO strings
+            elif isinstance(value, datetime):
+                normalized[norm_key] = value.isoformat()
+            # Convert boolean values consistently
+            elif isinstance(value, bool):
+                normalized[norm_key] = bool(value)
+            # Convert strings and trim whitespace
+            elif isinstance(value, str):
+                normalized[norm_key] = value.strip()
+            else:
+                normalized[norm_key] = value
+
+        return normalized
+
 
 class BaseTest(ABC):
     """
@@ -121,37 +152,6 @@ class BaseTest(ABC):
             )
         
         return self.results
-    
-    def _normalize_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        """Normalize a single row for cross-database consistency"""
-        normalized = {}
-        for key, value in row.items():
-            # Normalize field names to lowercase
-            norm_key = key.lower()
-            
-            # Handle None values
-            if value is None:
-                normalized[norm_key] = None
-            # Convert all numeric types to consistent format
-            elif isinstance(value, (int, float, Decimal)):
-                # Keep integers as integers, floats with precision
-                if isinstance(value, int) or (isinstance(value, (float, Decimal)) and float(value).is_integer()):
-                    normalized[norm_key] = int(float(value))
-                else:
-                    normalized[norm_key] = round(float(value), 2)
-            # Convert datetime objects to ISO strings
-            elif isinstance(value, datetime):
-                normalized[norm_key] = value.isoformat()
-            # Convert boolean values consistently
-            elif isinstance(value, bool):
-                normalized[norm_key] = bool(value)
-            # Convert strings and trim whitespace
-            elif isinstance(value, str):
-                normalized[norm_key] = value.strip()
-            else:
-                normalized[norm_key] = value
-
-        return normalized
 
     def get_summary(self) -> Dict[str, Any]:
         """Get summary of test results"""
